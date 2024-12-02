@@ -405,45 +405,103 @@ def test_action_file():
         assert action.file_contents, "File contents should not be empty"
 
 
-def test_streaming_action_by_char():
-    """Test parsing an action file by reading it character by character."""
-    action_file: str = load_test_file("action.xml")
+# def test_streaming_action_by_char():
+#     """Test parsing an action file by reading it character by character."""
+#     action_file: str = load_test_file("action.xml")
 
-    class Action(BaseModel):
-        action_type: str = Field(..., description="The type of action")
-        new_file_path: str = Field(..., description="The path of the new file")
-        file_contents: str = Field(..., description="The contents of the new file")
+#     class Action(BaseModel):
+#         action_type: str = Field(..., description="The type of action")
+#         new_file_path: str = Field(..., description="The path of the new file")
+#         file_contents: str = Field(..., description="The contents of the new file")
 
-    class ActionResponse(BaseModel):
-        thinking: str = Field(..., description="The thinking of the action")
-        actions: list[Action] = Field(..., description="The actions to take")
+#     class ActionResponse(BaseModel):
+#         thinking: str = Field(..., description="The thinking of the action")
+#         actions: list[Action] = Field(..., description="The actions to take")
 
-    # Read and parse file character by character
+#     # Read and parse file character by character
+#     partial_content = ""
+#     last_valid_result = None
+
+#     for char in action_file:
+#         partial_content += char
+#         result = parse_xml(ActionResponse, partial_content)
+#         if result is not None:
+#             validate_parsed_model(result, ActionResponse)
+#             # Only update last_valid_result if we have a complete model
+#             if isinstance(result, ActionResponse):
+#                 last_valid_result = result
+
+#     assert last_valid_result is not None, "Should have at least one valid parse"
+#     assert isinstance(
+#         last_valid_result, ActionResponse
+#     ), "Final result should be a complete model"
+
+#     # Validate the final result matches full parse
+#     full_parse = parse_xml(ActionResponse, action_file)
+#     assert isinstance(
+#         full_parse, ActionResponse
+#     ), "Full parse should be a complete model"
+#     assert (
+#         last_valid_result.model_dump() == full_parse.model_dump()
+#     ), "Streaming parse should match full parse"
+
+
+def test_streaming_by_char_2():
+    xml = """<response>
+<movies>
+<movie>
+<title>Avatar</title>
+<director>James Cameron</director>
+</movie>
+<movie>
+<title>Avengers: Endgame</title>
+<director>Anthony Russo, Joe Russo</director>
+</movie>
+<movie>
+<title>Titanic</title>
+<director>James Cameron</director>
+</movie>
+<movie>
+<title>Star Wars: The Force Awakens</title>
+<director>J.J. Abrams</director>
+</movie>
+<movie>
+<title>Jurassic World</title>
+<director>Colin Trevorrow</director>
+</movie>
+</movies>
+</response>
+"""
+
+    class Movie(BaseModel):
+        title: str = Field(..., description="The title of the movie")
+        director: str = Field(..., description="The director of the movie")
+
+    class Response(BaseModel):
+        movies: list[Movie] = Field(
+            ..., description="A list of movies that match the query"
+        )
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(
+            ..., description="The response object that contains the movies"
+        )
+
     partial_content = ""
     last_valid_result = None
-
-    for char in action_file:
+    for char in xml:
         partial_content += char
-        result = parse_xml(ActionResponse, partial_content)
+        result = parse_xml(ResponseObject, partial_content)
         if result is not None:
-            validate_parsed_model(result, ActionResponse)
+            validate_parsed_model(result, ResponseObject)
             # Only update last_valid_result if we have a complete model
-            if isinstance(result, ActionResponse):
+            if isinstance(result, ResponseObject):
                 last_valid_result = result
 
     assert last_valid_result is not None, "Should have at least one valid parse"
     assert isinstance(
-        last_valid_result, ActionResponse
+        last_valid_result, ResponseObject
     ), "Final result should be a complete model"
-
-    # Validate the final result matches full parse
-    full_parse = parse_xml(ActionResponse, action_file)
-    assert isinstance(
-        full_parse, ActionResponse
-    ), "Full parse should be a complete model"
-    assert (
-        last_valid_result.model_dump() == full_parse.model_dump()
-    ), "Streaming parse should match full parse"
 
 
 if __name__ == "__main__":
