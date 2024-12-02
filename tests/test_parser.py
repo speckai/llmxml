@@ -470,9 +470,7 @@ def test_streaming_by_char_2():
         result = parse_xml(ResponseObject, partial_content)
         if result is not None:
             validate_parsed_model(result, ResponseObject)
-            # Only update last_valid_result if we have a complete model
-            if isinstance(result, ResponseObject):
-                last_valid_result = result
+            last_valid_result = result
 
     assert last_valid_result is not None, "Should have at least one valid parse"
     assert isinstance(
