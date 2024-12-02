@@ -131,10 +131,15 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
 
         return "".join(parts)
 
-    def flatten_dict_values(d: dict) -> list:
+    def flatten_dict_values(d: Union[dict, list]) -> list:
         """Helper function to flatten nested dictionaries into a list."""
         flattened = []
-        for v in d.values():
+        if isinstance(d, dict):
+            values = d.values()
+        else:
+            values = d
+
+        for v in values:
             if isinstance(v, dict):
                 # If value is a dict, check if it's a wrapper (like 'movie')
                 if len(v) == 1 and isinstance(next(iter(v.values())), dict):
@@ -157,8 +162,10 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             values = []
             for key, value in field_value.items():
                 if isinstance(value, dict):
-                    # Add the value directly instead of dict_values
-                    values.append(value)
+                    if len(value) == 1 and next(iter(value.keys())) == key:
+                        values.append(next(iter(value.values())))
+                    else:
+                        values.append(value)
                 elif isinstance(value, list):
                     values.extend(value)
                 else:
@@ -170,6 +177,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         # Process each item in the list according to its type
         processed_items = []
         for item in field_value:
+            print(item, "AAAA")
             if hasattr(item_type, "model_fields"):
                 try:
                     # If item is a dict with a single key that matches our type name,
@@ -228,20 +236,13 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             return _process_list_field(field_value, field_info.annotation.__args__[0])
 
         # Handle case where value is a dict but should be a list
-        print(field_info.annotation)
-        print(type(field_info.annotation))
-        print(hasattr(field_info.annotation, "__origin__"))
         if hasattr(field_info.annotation, "__origin__"):
             print(field_info.annotation.__origin__)
             if field_info.annotation.__origin__ is Union:
-                print(f"Union types: {field_info.annotation.__args__}")
                 # Check if any of the Union types is a List
                 for arg in field_info.annotation.__args__:
-                    if hasattr(arg, "__origin__"):
-                        print("origin:", arg.__origin__)
                     if hasattr(arg, "__origin__") and arg.__origin__ is list:
                         # If field_value is a dict, wrap it in a list
-                        print("LIST!")
                         if isinstance(field_value, dict):
                             return [field_value]
 
@@ -261,6 +262,30 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                     processed_nested[nested_field_name] = _process_field_value(
                         nested_value, nested_field_info, nested_field_name
                     )
+                    # if the nested field is a list, flatten it
+                    if hasattr(nested_field_info.annotation, "__origin__"):
+                        if nested_field_info.annotation.__origin__ is Union:
+                            # Check if any of the Union types is a List
+                            for arg in nested_field_info.annotation.__args__:
+                                if (
+                                    hasattr(arg, "__origin__")
+                                    and arg.__origin__ is list
+                                ):
+                                    print("HAS LIST")
+                                    processed_nested[nested_field_name] = (
+                                        flatten_dict_values(
+                                            processed_nested[nested_field_name]
+                                        )
+                                    )
+
+                    # if (
+                    #     hasattr(nested_field_info.annotation, "__origin__")
+                    #     and nested_field_info.annotation.__origin__ is list
+                    # ):
+                    #     print("FLATTENING LIST", nested_field_name)
+                    #     processed_nested[nested_field_name] = flatten_dict_values(
+                    #         processed_nested[nested_field_name]
+                    #     )
                 else:
                     # Initialize missing fields
                     if (
@@ -274,6 +299,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             try:
                 return field_info.annotation(**processed_nested)
             except Exception:
+                print("EXCEPTION FOR MODEL:", field_name)
                 # If validation fails, try creating a partial model
                 partial_model = _create_partial_model(
                     field_info.annotation, processed_nested
@@ -383,6 +409,7 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
             default = False
         elif hasattr(field_info.annotation, "model_fields"):  # Handle nested models
             nested_partial = _create_partial_model(field_info.annotation, {})
+
             default = nested_partial()
             field_info.annotation = nested_partial
         else:
