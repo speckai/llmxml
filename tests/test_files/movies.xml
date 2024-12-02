@@ -1,0 +1,14 @@
+Here is the shortened filmography for Tom Hanks, with movies enclosed in XML tags:
+
+<movies>
+<movie_name>Splash</movie_name>
+<movie_name>Big</movie_name>
+<movie_name>A League of Their Own</movie_name>
+<movie_name>Sleepless in Seattle</movie_name>
+<movie_name>Forrest Gump</movie_name>
+<movie_name>Toy Story</movie_name>
+<movie_name>Apollo 13</movie_name>
+<movie_name>Saving Private Ryan</movie_name>
+<movie_name>Cast Away</movie_name>
+<movie_name>The Da Vinci Code</movie_name>
+</movies>

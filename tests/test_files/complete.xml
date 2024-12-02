@@ -1,0 +1,78 @@
+<thinking>
+Let me implement the search functionality for the Spotify clone:
+
+1. Component Structure:
+- Search input with icon
+- Debounced search handler
+- Results display grid
+
+2. Implementation Details:
+- Use shadcn/ui Input component
+- Add Lucide search icon
+- Implement client-side filtering
+</thinking>
+
+<actions>
+<action>
+<action_type>create</action_type>
+<new_file_path>components/Search.tsx</new_file_path>
+<file_contents>
+import { Search } from 'lucide-react'
+import { Input } from './ui/input'
+import { useState, useCallback } from 'react'
+import debounce from 'lodash/debounce'
+
+export const SearchBar = () => {
+  const [query, setQuery] = useState('')
+  
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      console.log('Searching:', value)
+    }, 300),
+    []
+  )
+
+  return (
+    <div className="relative w-full max-w-md">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+      <Input
+        placeholder="Search..."
+        className="w-full bg-neutral-800 pl-10 text-white"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          debouncedSearch(e.target.value)
+        }}
+      />
+    </div>
+  )
+}
+</file_contents>
+</action>
+
+<action>
+<action_type>command</action_type>
+<command>npm install lodash @types/lodash --save</command>
+</action>
+
+<action>
+<action_type>edit</action_type>
+<original_file_path>app/spotify/page.tsx</original_file_path>
+<new_file_contents>
+import { SearchBar } from '@/components/Search'
+
+const SpotifyPage = () => {
+  return (
+    <div className="space-y-6 p-6">
+      <SearchBar />
+      <div className="grid grid-cols-3 gap-4">
+        {/* Existing content */}
+      </div>
+    </div>
+  )
+}
+
+export default SpotifyPage
+</new_file_contents>
+</action>
+</actions> 

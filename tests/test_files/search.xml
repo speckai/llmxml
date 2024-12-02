@@ -1,0 +1,409 @@
+<objective>
+Create a visual Spotify clone in /spotify directory using current Spotify web player design. Include core features: navigation sidebar, home feed with playlists, basic search bar, and static song list display. Implement mock music controls (play/pause button, progress bar, volume) without actual audio playback. Use placeholder data for artists and playlists.
+</objective>
+
+Here are the search results:
+<search_results>
+<search_result>
+    <chunk_id>
+    app/page.tsx:260-292
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                          <CardDescription className="mb-3 text-center">
+                    Comprehensive prompts and responses
+                  </CardDescription>
+                  <Image
+                    src="/openai.webp"
+                    alt="cafe scenario"
+                    width={128}
+                    height={128}
+                    quality={100}
+                    className="rounded-xl"
+                  />
+                </Card>
+
+                <Card className="flex flex-col items-center justify-center gap-2 p-6 md:flex-1">
+                  <CardTitle>WebSpeech</CardTitle>
+                  <CardDescription className="mb-3 text-center">
+                    Text to speech
+                  </CardDescription>
+                  <Image
+                    src="/speaker.webp"
+                    alt="cafe scenario"
+                    width={128}
+                    height={128}
+                    quality={100}
+                    className="rounded-xl"
+                  />
+                </Card>
+              </div>
+            </div>
+          </div>
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.4074956178665161
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:73-100
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                            quality={100}
+                    className="rounded-md bg-special p-2 shadow-2xl ring-1 ring-gray-900/10 md:p-8"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80"
+          >
+            <div
+              style={{
+                clipPath:
+                  "polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)",
+              }}
+              className="relative right-[calc(50%-13rem)] aspect-[1155/678] w-[36.125rem] translate-x-1/3 rotate-[30deg] bg-gradient-to-tr from-[#0a95ff] to-[#95f2fa] opacity-30 sm:left-[calc(50%-36rem)] sm:w-[72.1875rem] sm:translate-y-8"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <MaxWidthWrapper>
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.39815372228622437
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:58-77
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                          "polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)",
+              }}
+              className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#0a95ff] to-[#95f2fa] opacity-30 sm:left-[calc(50%-20rem)] sm:w-[72.1875rem] sm:translate-y-8"
+            />
+          </div>
+
+          <div>
+            <div className="mx-auto flex max-w-6xl justify-center px-6 lg:px-8">
+              <div className="mt-8 flow-root sm:mt-16">
+                <div className="-m-2 w-fit rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10  lg:-m-4 lg:rounded-2xl lg:p-4">
+                  <Image
+                    src="/dashboard-preview.png"
+                    alt="product preview"
+                    width={955}
+                    height={808}
+                    quality={100}
+                    className="rounded-md bg-special p-2 shadow-2xl ring-1 ring-gray-900/10 md:p-8"
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.38716569542884827
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:140-168
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                          <span className="text-xl font-semibold">
+                    Choose a <span className="text-blue-600">Language</span> &{" "}
+                    <span className="text-blue-600">Scenario</span>
+                  </span>
+                </div>
+              </li>
+              <li className="md:flex-1">
+                <div className="flex flex-col space-y-2 border-l-4 border-zinc-300 py-2 pl-4 md:border-l-0 md:border-t-2 md:pb-0 md:pl-0 md:pt-4">
+                  <span className="text-sm font-medium text-blue-600">
+                    Step 3
+                  </span>
+                  <span className="text-xl font-semibold">
+                    Start Your Speaking Session
+                  </span>
+                  {/* <span className="mt-2 text-zinc-700">
+                
+              </span> */}
+                </div>
+              </li>
+            </ol>
+          </div>
+
+          {/* Scenarios */}
+          <div>
+            <div className="mb-6 px-6 lg:px-8">
+              <div className="mx-auto max-w-2xl sm:text-center">
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.381885290145874
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:0-28
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+        "use client";
+
+import MaxWidthWrapper from "@/components/MaxWidthWrapper";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+
+import Footer from "@/components/Footer";
+import Navbar from "@/components/Navbar";
+import { cn } from "@/lib/utils";
+import Image from "next/image";
+import Link from "next/link";
+
+
+
+export default function Home() {
+  return (
+    <>
+      <Navbar />
+
+      {/* Hero */}
+      <MaxWidthWrapper className="mt-10 flex flex-col items-center justify-center text-center sm:mt-12">
+        <div className="mx-auto mb-4 flex max-w-fit items-center justify-center space-x-2 overflow-hidden rounded-full border border-gray-200 bg-white px-7 py-2 shadow-md backdrop-blur transition-all hover:border-gray-300 hover:bg-white/50">
+          <p className="text-sm font-semibold text-gray-700">
+            Try Convo for Free
+          </p>
+        </div>
+
+        <h1 className="max-w-4xl text-5xl font-bold md:text-6xl lg:text-7xl">
+          <span className="text-blue-600">Speech</span> Focused Language
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.3617371916770935
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:165-190
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                      <div className="mx-auto max-w-2xl sm:text-center">
+                <h2 className="mt-2 text-4xl font-bold text-gray-900 sm:text-5xl">
+                  Practice in Real Life Scenarios
+                </h2>
+                <p className="mt-4 text-lg text-gray-600">
+                  Get help if you make a mistake and guidance on saying
+                  something in your target language.
+                </p>
+              </div>
+            </div>
+            {/* steps */}
+
+            <div className="flex items-center justify-center">
+              <div className="flex flex-col gap-6 md:flex-row">
+                <Card className="flex flex-col items-center justify-center gap-2 p-6 md:flex-1">
+                  <CardTitle>At the Cafe</CardTitle>
+                  <CardDescription className="mb-3 text-center">
+                    Learn how to order drinks and snacks
+                  </CardDescription>
+                  <Image
+                    src="/coffee.webp"
+                    alt="cafe scenario"
+                    width={128}
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.35791975259780884
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:186-212
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                            alt="cafe scenario"
+                    width={128}
+                    height={128}
+                    quality={100}
+                  />
+                </Card>
+                <Card className="flex flex-col items-center justify-center gap-2 p-6 md:flex-1">
+                  <CardTitle>Getting A Taxi</CardTitle>
+                  <CardDescription className="mb-3 text-center">
+                    Learn how to navigate and get directions
+                  </CardDescription>
+                  <Image
+                    src="/taxi.webp"
+                    alt="cafe scenario"
+                    width={128}
+                    height={128}
+                    quality={100}
+                  />
+                </Card>
+
+                <Card className="flex flex-col items-center justify-center gap-2 p-6 md:flex-1">
+                  <CardTitle>Social Activities</CardTitle>
+                  <CardDescription className="mb-3 text-center">
+                    Learn how to make plans and catch up with friends
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.3527543842792511
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    app/page.tsx:209-239
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+                            Learn how to make plans and catch up with friends
+                  </CardDescription>
+                  <Image
+                    src="/schedule.webp"
+                    alt="cafe scenario"
+                    width={128}
+                    height={128}
+                    quality={100}
+                  />
+                </Card>
+              </div>
+            </div>
+            <div className="mb-6 px-6 lg:px-8">
+              <div className="mx-auto max-w-2xl text-center">
+                <p className="mt-4 text-lg text-gray-600">and many more...</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Powered By */}
+          <div>
+            <div className="mb-6 px-6 lg:px-8">
+              <div className="mx-auto max-w-2xl sm:text-center">
+                <h2 className="mt-2 text-4xl font-bold text-gray-900 sm:text-5xl">
+                  Powered by
+                </h2>
+                <p className="mt-4 text-lg text-gray-600">
+                  These are the technologies behind the scene that make Convo
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.352558970451355
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    components.json:0-15
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        components.json
+        </file_path>
+        <content>
+        {
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils"
+  }
+}
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.34159374237060547
+    </vector_similarity_score>
+</search_result>
+<search_result>
+    <chunk_id>
+    components/Navbar.tsx:30-66
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        components/Navbar.tsx
+        </file_path>
+        <content>
+                    <span className="text-2xl font-semibold">Convo</span>
+          </Link>
+          <div className="flex gap-1 sm:gap-4 items-center">
+            {!isUserSignedIn ? (
+              <MobileNav />
+            ) : (
+              <Link
+                className={buttonVariants({
+                  size: "sm",
+                  className: "sm:hidden mr-3",
+                })}
+                href="/dashboard"
+              >
+                Dashboard
+              </Link>
+            )}
+
+            <div className="hidden items-center space-x-4 sm:flex">
+              {!isUserSignedIn ? (
+                <>
+                  <Link
+                    href="/pricing"
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "sm",
+                    })}
+                  >
+                    Pricing
+                  </Link>
+                  <Link
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "sm",
+                    })}
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.33624720573425293
+    </vector_similarity_score>
+</search_result>
+</search_results>
