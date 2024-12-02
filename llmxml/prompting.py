@@ -62,14 +62,47 @@ def _process_field(field_name: str, field_info) -> str:
     """Process a single field and return its XML representation."""
     type_info = _get_type_info(field_info)
 
-    # Handle List[Union[...]] types with nested fields
+    # Handle list types
     if (
         hasattr(field_info.annotation, "__origin__")
         and field_info.annotation.__origin__ is list
     ):
+        # Get the type of items in the list
+        item_type = get_args(field_info.annotation)[0]
+        description = field_info.description or f"Description of {field_name}"
+
+        # If the list contains Pydantic models, show the structure of a single item
+        if isinstance(item_type, type) and issubclass(item_type, BaseModel):
+            nested_fields = item_type.model_fields
+            item_name = item_type.__name__.lower()
+            nested_prompts = [
+                _process_field(name, info) for name, info in nested_fields.items()
+            ]
+            return (
+                f"<{field_name}>\n[{type_info}]\n[{description}]\n"
+                f"<{item_name}>\n" + "\n".join(nested_prompts) + f"\n</{item_name}>\n"
+                f"</{field_name}>"
+            )
+
+        # Handle other list types including List[Union[...]]
         nested_result = _process_nested_union_list(field_name, field_info, type_info)
         if nested_result:
             return nested_result
+
+    # Handle nested Pydantic models
+    if isinstance(field_info.annotation, type) and issubclass(
+        field_info.annotation, BaseModel
+    ):
+        description = field_info.description or f"Description of {field_name}"
+        nested_fields = field_info.annotation.model_fields
+        nested_prompts = [
+            _process_field(name, info) for name, info in nested_fields.items()
+        ]
+        return (
+            f"<{field_name}>\n[{type_info}]\n[{description}]\n"
+            + "\n".join(nested_prompts)
+            + f"\n</{field_name}>"
+        )
 
     description = field_info.description or f"Description of {field_name}"
     return f"<{field_name}>\n[{type_info}]\n[{description}]\n</{field_name}>"
@@ -82,7 +115,7 @@ def generate_prompt_template(
     # Process each field and join with double newlines
     fields = model.model_fields
     field_prompts = [_process_field(name, info) for name, info in fields.items()]
-    template = "\n\n".join(field_prompts)
+    template = "\n".join(field_prompts)
 
     if include_instructions:
         return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT}\n{template}\n</response_instructions>"
@@ -140,3 +173,20 @@ if __name__ == "__main__":
 
     prompt_template = generate_prompt_template(Action)
     print(prompt_template)
+
+    class Movie(BaseModel):
+        title: str = Field(..., description="The title of the movie")
+        director: str = Field(..., description="The director of the movie")
+
+    class Response(BaseModel):
+        movies: list[Movie] = Field(
+            ..., description="A list of movies that match the query"
+        )
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(
+            ..., description="The response object that contains the movies"
+        )
+
+    x = generate_prompt_template(ResponseObject)
+    print(x)
