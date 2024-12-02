@@ -3,9 +3,7 @@ from typing import List, Literal, Type, Union, get_args
 from pydantic import BaseModel, Field
 
 ADHERE_INSTRUCTIONS_PROMPT = """
-You are to understand the content and provide the parsed objects in xml that match the following xml_schema:
-
-Make sure to return an instance of the XML, not the schema itself
+You are to understand the content and provide your output in the following xml-like format EXACTLY as described in the field_schema.
 
 Each field in the field_schema has a description and a type.
 Example:
