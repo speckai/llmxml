@@ -3,16 +3,16 @@ from typing import List, Literal, Type, Union, get_args
 from pydantic import BaseModel, Field
 
 ADHERE_INSTRUCTIONS_PROMPT = """
-You are to understand the content and provide your output in the following xml-like format EXACTLY as described in the field_schema.
+You are to provide your output in the following xml-like format EXACTLY as described in the schema provided.
 
-Each field in the field_schema has a description and a type.
+Each field in the schema has a description and a type.
 Example:
 <field_name>
 [type]
 [description]
 </field_name>
 
-Schema:
+Response Schema:
 """.strip()
 
 
@@ -45,8 +45,7 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
                     f"\n# Option {idx}: {subtype.__name__}"
                     + "\n"
                     + "\n".join(
-                        "    " + _process_field(name, info).replace("\n", "\n    ")
-                        for name, info in subfields.items()
+                        _process_field(name, info) for name, info in subfields.items()
                     )
                     + "\n"
                 )
@@ -77,14 +76,11 @@ def _process_field(field_name: str, field_info) -> str:
             nested_fields = item_type.model_fields
             item_name = item_type.__name__.lower()
             nested_prompts = [
-                "    " + _process_field(name, info).replace("\n", "\n    ")
-                for name, info in nested_fields.items()
+                _process_field(name, info) for name, info in nested_fields.items()
             ]
             return (
                 f"<{field_name}>\n[{type_info}]\n[{description}]\n"
-                f"    <{item_name}>\n"
-                + "\n".join(nested_prompts)
-                + f"\n    </{item_name}>\n"
+                f"<{item_name}>\n" + "\n".join(nested_prompts) + f"\n</{item_name}>\n"
                 f"</{field_name}>"
             )
 
@@ -100,8 +96,7 @@ def _process_field(field_name: str, field_info) -> str:
         description = field_info.description or f"Description of {field_name}"
         nested_fields = field_info.annotation.model_fields
         nested_prompts = [
-            "    " + _process_field(name, info).replace("\n", "\n    ")
-            for name, info in nested_fields.items()
+            _process_field(name, info) for name, info in nested_fields.items()
         ]
         return (
             f"<{field_name}>\n[{type_info}]\n[{description}]\n"
