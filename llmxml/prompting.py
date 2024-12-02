@@ -45,7 +45,8 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
                     f"\n# Option {idx}: {subtype.__name__}"
                     + "\n"
                     + "\n".join(
-                        _process_field(name, info) for name, info in subfields.items()
+                        "    " + _process_field(name, info).replace("\n", "\n    ")
+                        for name, info in subfields.items()
                     )
                     + "\n"
                 )
@@ -76,11 +77,14 @@ def _process_field(field_name: str, field_info) -> str:
             nested_fields = item_type.model_fields
             item_name = item_type.__name__.lower()
             nested_prompts = [
-                _process_field(name, info) for name, info in nested_fields.items()
+                "    " + _process_field(name, info).replace("\n", "\n    ")
+                for name, info in nested_fields.items()
             ]
             return (
                 f"<{field_name}>\n[{type_info}]\n[{description}]\n"
-                f"<{item_name}>\n" + "\n".join(nested_prompts) + f"\n</{item_name}>\n"
+                f"    <{item_name}>\n"
+                + "\n".join(nested_prompts)
+                + f"\n    </{item_name}>\n"
                 f"</{field_name}>"
             )
 
@@ -96,7 +100,8 @@ def _process_field(field_name: str, field_info) -> str:
         description = field_info.description or f"Description of {field_name}"
         nested_fields = field_info.annotation.model_fields
         nested_prompts = [
-            _process_field(name, info) for name, info in nested_fields.items()
+            "    " + _process_field(name, info).replace("\n", "\n    ")
+            for name, info in nested_fields.items()
         ]
         return (
             f"<{field_name}>\n[{type_info}]\n[{description}]\n"
