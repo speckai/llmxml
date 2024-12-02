@@ -2,6 +2,8 @@
 
 XML outputs are a common format for LLM outputs, but they are not always easy to parse. This package provides a way to parse XML outputs into Pydantic models.
 
+This supports nested models, lists, and unions as well as partial parsing for streamed responses. llmxml also supports generating a prompt template for the XML schema to pass to the LLM.
+
 ![Parser Demo](assets/parser.gif)
 
 ## Usage
