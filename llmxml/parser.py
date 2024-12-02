@@ -66,25 +66,32 @@ def _clean_xml(xml_content: str) -> str:
 
 
 def _xml_to_dict(element: ET.Element) -> any:
+    print("\n=== XML TO DICT ===")
+    print(f"Processing element: {element.tag}")
     result: dict[str, any] = {}
 
     # Handle empty elements
     if not element.text and not len(element):
+        print("Empty element")
         return {}
 
     if element.text and element.text.strip():
         text: str = element.text.strip()
+        print(f"Element text: {text}")
         if not len(element):
             return text
         result["_text"] = text
 
     child_tags: list[str] = [child.tag for child in element]
     tag_counts: dict[str, int] = {tag: child_tags.count(tag) for tag in set(child_tags)}
+    print(f"Child tags: {child_tags}")
+    print(f"Tag counts: {tag_counts}")
 
     # Handle children
     for child in element:
         key: str = child.tag
         value: any = _xml_to_dict(child)
+        print(f"Child {key}: {value}")
 
         # If this tag appears multiple times, make it a list
         if tag_counts[key] > 1:
@@ -94,18 +101,16 @@ def _xml_to_dict(element: ET.Element) -> any:
         else:
             result[key] = value
 
-    # If this is the root element, flatten it
-    if element.tag == "root":
-        return {k: v for k, v in result.items() if not k.startswith("_")}
-
-    # If we only have text content, return it directly
-    return result["_text"] if len(result) == 1 and "_text" in result else result
+    print(f"Final result for {element.tag}: {result}")
+    return result
 
 
 def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
     """Process dictionary to match model field types."""
     processed: dict = {}
     model_fields = model.model_fields
+
+    print(f"\nProcessing model: {model.__name__}")
 
     def _reconstruct_text(value: dict) -> str:
         """Recursively reconstruct text content from a dictionary of text parts."""
@@ -156,8 +161,11 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
 
     def _process_list_field(field_value: any, item_type: Type) -> list:
         """Process a field value as a list with given item type."""
+        print(f"\nProcessing list field with item_type: {item_type.__name__}")
+
         # Convert to list if not already
         if isinstance(field_value, dict):
+            print(f"Field value is dict: {field_value}")
             # Handle nested structures by flattening them
             values = []
             for key, value in field_value.items():
@@ -177,7 +185,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         # Process each item in the list according to its type
         processed_items = []
         for item in field_value:
-            print(item, "AAAA")
             if hasattr(item_type, "model_fields"):
                 try:
                     # If item is a dict with a single key that matches our type name,
@@ -199,6 +206,9 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         field_value: any, field_info: any, field_name: str = None
     ) -> any:
         """Process a field value according to its type and annotation."""
+        print(f"\nProcessing field: {field_name}")
+        if hasattr(field_info.annotation, "__origin__"):
+            print(f"Field annotation origin: {field_info.annotation.__origin__}")
         # Handle empty or None values
         if field_value is None or field_value == "":
             # For nested models, return empty dict
@@ -271,7 +281,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                                     hasattr(arg, "__origin__")
                                     and arg.__origin__ is list
                                 ):
-                                    print("HAS LIST")
                                     processed_nested[nested_field_name] = (
                                         flatten_dict_values(
                                             processed_nested[nested_field_name]
@@ -387,10 +396,12 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
 
     model_name: str = model.__name__
     partial_name: str = f"Partial{model_name}"
+    print(f"\nCreating partial model: {partial_name}")
 
     # Make all fields optional for partial model
     fields: dict = {}
     for field, field_info in model.model_fields.items():
+        print(f"Field: {field}, type: {field_info.annotation}")
         # Get default empty value based on type
         if field_info.annotation is str:
             default = ""
@@ -399,6 +410,11 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
             and field_info.annotation.__origin__ is list
         ):
             default = []
+            if hasattr(field_info.annotation.__args__[0], "model_fields"):
+                # Make it a partial model
+                field_info.annotation = _create_partial_model(
+                    field_info.annotation.__args__[0], {}
+                )
         elif field_info.annotation is dict:
             default = {}
         elif field_info.annotation is int:
@@ -421,34 +437,29 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
 
 
 def parse_xml(model: Type[T], xml_str: str) -> T:
-    """Parse XML string into a Pydantic model.
+    print("\n=== PARSE XML ===")
+    print(f"Input XML: {xml_str[:100]}...")
 
-    Takes an XML string and converts it into a Pydantic model instance. The XML structure
-    should match the model's field definitions. Handles both complete and partial XML content.
-
-    Args:
-        model: The Pydantic model class to parse into
-        xml_str: The XML string to parse
-
-    Returns:
-        An instance of the provided model populated with the XML data
-
-    Raises:
-        ET.ParseError: If the XML is malformed and cannot be parsed
-    """
     if not xml_str.strip():
         return _create_partial_model(model, {})()
 
     # Try to parse as complete XML first
     cleaned_xml: str = _clean_xml(xml_str)
+    print(f"\nCleaned XML: {cleaned_xml[:100]}...")
+
     try:
         root: ET.Element = ET.fromstring(cleaned_xml)
+        print("Successfully parsed XML")
         data: dict = _xml_to_dict(root)
-    except ET.ParseError:
+        print(f"\nParsed data: {data}")
+    except ET.ParseError as e:
+        print(f"XML Parse error: {e}")
         data = _extract_partial_content(xml_str)
+        print(f"Extracted partial content: {data}")
 
     # Process the data according to the model's fields
     processed_data: dict = _process_dict_for_model(data, model)
+    print(f"\nFinal processed data: {processed_data}")
 
     # Create and return the model instance
     if not processed_data:
@@ -456,7 +467,8 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
 
     try:
         return model(**processed_data)
-    except Exception:
+    except Exception as e:
+        print(f"Error creating model: {e}")
         # Create empty processed data with proper nested structure
         empty_processed_data: dict = {}
         for field_name, field_info in model.model_fields.items():

@@ -1,4 +1,4 @@
-from typing import List, TypeVar, Union
+from typing import List, TypeVar
 
 from llmxml.parser import parse_xml
 from pydantic import BaseModel, Field
@@ -34,8 +34,8 @@ def test_streaming_by_char_2():
 """
 
     class Movie(BaseModel):
-        title: Union[str, None] = Field(..., description="The title of the movie")
-        director: Union[str, None] = Field(..., description="The director of the movie")
+        title: str = Field(..., description="The title of the movie")
+        director: str = Field(..., description="The director of the movie")
 
     class Response(BaseModel):
         movies: List[Movie] = Field(
@@ -51,12 +51,12 @@ def test_streaming_by_char_2():
     last_valid_result = None
     for char in xml:
         partial_content += char
-        print(partial_content, end="\n-------\n")
         result = parse_xml(ResponseObject, partial_content)
 
         print(result)
 
     last_valid_result = result
+    print(result)
     assert isinstance(last_valid_result, ResponseObject)
 
 
