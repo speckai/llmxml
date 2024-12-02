@@ -7,17 +7,17 @@ def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
     return f"""
 You are to provide your output in the following xml-like format EXACTLY as described in the schema provided.
 
-Each field in the schema has a description and a type.
-Example:
+Each field in the schema has a description and a type enclosed in square brackets, denoting that they are metadata.
+Format instructions:
 <field_name>
-[type]
+[python_type]
 [description]
 </field_name>
 
 Response Schema:
 {schema}
 
-Make sure to return an instance of the output, NOT the schema itself.
+Make sure to return an instance of the output, NOT the schema itself. Do NOT include any schema metadata (like [type: ...]) in your output.
 """.strip()
 
 
