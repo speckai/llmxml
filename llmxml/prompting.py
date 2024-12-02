@@ -2,7 +2,9 @@ from typing import List, Literal, Type, Union, get_args
 
 from pydantic import BaseModel, Field
 
-ADHERE_INSTRUCTIONS_PROMPT = """
+
+def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
+    return f"""
 You are to provide your output in the following xml-like format EXACTLY as described in the schema provided.
 
 Each field in the schema has a description and a type.
@@ -13,6 +15,9 @@ Example:
 </field_name>
 
 Response Schema:
+{schema}
+
+Make sure to return an instance of the output, NOT the schema itself.
 """.strip()
 
 
@@ -118,7 +123,7 @@ def generate_prompt_template(
     template = "\n".join(field_prompts)
 
     if include_instructions:
-        return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT}\n{template}\n</response_instructions>"
+        return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT(template)}\n</response_instructions>"
     return template
 
 
