@@ -122,6 +122,22 @@ def test_empty_response():
     assert len(result.actions) == 0
 
 
+def test_small_response():
+    xml = """
+    <response>
+
+    """
+
+    class Response(BaseModel):
+        movies: list[str] = Field(..., description="A list of movies")
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(..., description="The response object")
+
+    result = parse_xml(ResponseObject, xml)
+    assert result.response.movies == []
+
+
 def test_code_blocks():
     """Test parsing response with code blocks containing XML-like content."""
     xml = load_test_file("complete.xml")
