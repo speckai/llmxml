@@ -1,0 +1,54 @@
+<thinking>
+Let me implement the player controls:
+
+1. Component Structure:
+- Play/pause button
+- Next/previous buttons
+- Volume control
+- Progress bar
+
+2. Implementation Details:
+- Use Lucide icons
+- Add hover effects
+- Implement smooth transitions
+</thinking>
+
+<actions>
+<action>
+<action_type>create</action_type>
+<new_file_path>components/PlayerControls.tsx</new_file_path>
+<file_contents>
+import { Play, SkipBack, SkipForward, Volume2 } from 'lucide-react'
+import { Slider } from './ui/slider'
+
+export const PlayerControls = () => {
+  return (
+    <div className="flex items-center justify-between px-4">
+      <div className="flex items-center gap-4">
+        <button className="rounded-full p-2 hover:bg-neutral-800">
+          <SkipBack className="h-5 w-5 text-neutral-400" />
+        </button>
+        <button className="rounded-full bg-white p-3">
+          <Play className="h-6 w-6 fill-black" />
+        </button>
+        <button className="rounded-full p-2 hover:bg-neutral-800">
+          <SkipForward className="h-5 w-5 text-neutral-400" />
+        </button>
+      </div>
+      
+      <div className="flex w-full max-w-md items-center gap-2">
+        <Slider
+          defaultValue={[0]}
+          max={100}
+          step={1}
+          className="w-full"
+        />
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <Volume2 className="h-5 w-5 text-neutral-400" />
+        <Slider
+          defaultValue={[100]}
+          max={100}
+          step={1}
+          c

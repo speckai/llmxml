@@ -1,0 +1,48 @@
+<thinking>
+Let me implement the playlist grid component:
+
+1. Component Structure:
+- Grid layout for playlists
+- Individual playlist cards
+- Hover effects and animations
+
+2. Implementation Details:
+- Use CSS Grid for layout
+- Add play button overlay
+- Implement smooth transitions
+</thinking>
+
+<actions>
+<action>
+<action_type>create</action_type>
+<new_file_path>components/PlaylistGrid.tsx</new_file_path>
+<file_contents>
+import { Play } from 'lucide-react'
+
+export const PlaylistGrid = () => {
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {playlists.map((playlist) => (
+        <div
+          key={playlist.id}
+          className="group relative aspect-square overflow-hidden rounded-md bg-neutral-800/40"
+        >
+          <img
+            src={playlist.cover}
+            alt={playlist.name}
+            className="h-full w-full object-cover transition-all duration-300 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            <button className="absolute bottom-4 right-4 rounded-full bg-green-500 p-3 shadow-lg">
+              <Play className="h-6 w-6 fill-white" />
+            </button>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-4">
+            <h3 className="font-semibold text-white">{playlist.name}</h3>
+            <p className="text-sm text-neutral-400">{playlist.tracks} tracks</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+} 
