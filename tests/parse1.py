@@ -1,7 +1,6 @@
-from typing import List, TypeVar
+from typing import List, TypeVar, Union
 
 from llmxml.parser import parse_xml
-from llmxml.prompting import generate_prompt_template
 from pydantic import BaseModel, Field
 
 T = TypeVar("T", bound=BaseModel)
@@ -35,8 +34,8 @@ def test_streaming_by_char_2():
 """
 
     class Movie(BaseModel):
-        title: str = Field(..., description="The title of the movie")
-        director: str = Field(..., description="The director of the movie")
+        title: Union[str, None] = Field(..., description="The title of the movie")
+        director: Union[str, None] = Field(..., description="The director of the movie")
 
     class Response(BaseModel):
         movies: List[Movie] = Field(
@@ -47,9 +46,6 @@ def test_streaming_by_char_2():
         response: Response = Field(
             ..., description="The response object that contains the movies"
         )
-
-    prompt_template = generate_prompt_template(ResponseObject)
-    print(prompt_template)
 
     partial_content = ""
     last_valid_result = None
