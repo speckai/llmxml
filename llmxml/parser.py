@@ -131,6 +131,56 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
 
         return "".join(parts)
 
+    def flatten_dict_values(d: dict) -> list:
+        """Helper function to flatten nested dictionaries into a list."""
+        flattened = []
+        for v in d.values():
+            if isinstance(v, dict):
+                # If value is a dict, it might be a single item or contain multiple items
+                if any(isinstance(sv, dict) for sv in v.values()):
+                    # Contains multiple items
+                    flattened.extend(flatten_dict_values(v))
+                else:
+                    # Single item
+                    flattened.append(v)
+            elif isinstance(v, list):
+                flattened.extend(v)
+            else:
+                flattened.append(v)
+        return flattened
+
+    def _process_list_field(field_value: any, item_type: Type) -> list:
+        """Process a field value as a list with given item type."""
+        # Convert to list if not already
+        if isinstance(field_value, dict):
+            # For streaming partial content, handle single items
+            if len(field_value) == 1 and any(
+                isinstance(v, dict)
+                and not any(isinstance(sv, dict) for sv in v.values())
+                for v in field_value.values()
+            ):
+                # Single complete item
+                field_value = [next(iter(field_value.values()))]
+            else:
+                # Multiple or partial items
+                field_value = flatten_dict_values(field_value)
+        elif not isinstance(field_value, list):
+            field_value = [field_value]
+
+        # Process each item in the list according to its type
+        processed_items = []
+        for item in field_value:
+            if hasattr(item_type, "model_fields"):
+                try:
+                    processed_item = _process_dict_for_model(item, item_type)
+                    model_instance = item_type(**processed_item)
+                    processed_items.append(model_instance)
+                except Exception:
+                    continue
+            else:
+                processed_items.append(item)
+        return processed_items
+
     def _process_field_value(
         field_value: any, field_info: any, field_name: str = None
     ) -> any:
@@ -148,104 +198,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 return []
             return None
 
-        # Handle lists
-        if (
-            getattr(field_info.annotation, "__origin__", None) is list
-            and len(field_info.annotation.__args__) > 0
-        ):
-            item_type = field_info.annotation.__args__[0]
-
-            # Convert to list if not already
-            if isinstance(field_value, dict):
-                # Extract values from dict
-                values: list[any] = []
-                for v in field_value.values():
-                    if isinstance(v, list):
-                        values.extend(v)
-                    else:
-                        values.append(v)
-                field_value = values
-            elif not isinstance(field_value, list):
-                field_value = [field_value]
-
-            # Handle Union type in list
-            if getattr(item_type, "__origin__", None) == Union:
-                processed_items: list[any] = []
-                for item in field_value:
-                    # Try each possible type in the Union
-                    for possible_type in item_type.__args__:
-                        try:
-                            if hasattr(possible_type, "model_fields"):
-                                # Check if we have all required fields
-                                has_all_fields: bool = True
-                                for (
-                                    field_name,
-                                    field_info,
-                                ) in possible_type.model_fields.items():
-                                    if (
-                                        field_info.is_required()
-                                        and field_name not in item
-                                    ):
-                                        has_all_fields = False
-                                        break
-
-                                if has_all_fields:
-                                    processed: dict = _process_dict_for_model(
-                                        item, possible_type
-                                    )
-                                    model_instance = possible_type(**processed)
-                                    processed_items.append(model_instance)
-                                    break
-                        except Exception:
-                            continue
-                return processed_items
-            # Handle regular model type in list
-            elif hasattr(item_type, "model_fields"):
-                processed_items: list[any] = []
-                for item in field_value:
-                    try:
-                        processed: dict = _process_dict_for_model(item, item_type)
-                        model_instance = item_type(**processed)
-                        processed_items.append(model_instance)
-                    except Exception:
-                        continue
-                return processed_items
-            else:
-                return field_value
-
-        # Handle single Union type
-        if (
-            hasattr(field_info.annotation, "__origin__")
-            and field_info.annotation.__origin__ == Union
-        ):
-            # Try each possible type in the Union
-            for possible_type in field_info.annotation.__args__:
-                try:
-                    if hasattr(possible_type, "model_fields"):
-                        processed: dict = _process_dict_for_model(
-                            field_value, possible_type
-                        )
-                        return possible_type(**processed)
-                    elif possible_type is str and isinstance(field_value, (str, dict)):
-                        return (
-                            _reconstruct_text(field_value)
-                            if isinstance(field_value, dict)
-                            else field_value
-                        )
-                except Exception:
-                    continue
-            return None
-
-        # Handle nested models
-        if hasattr(field_info.annotation, "model_fields"):
-            if isinstance(field_value, str):
-                return field_value
-            processed: dict = _process_dict_for_model(
-                field_value, field_info.annotation
-            )
-            return field_info.annotation(**processed)
-
-        # Handle text content in dictionary
+        # Handle text content in dictionary first
         if isinstance(field_value, dict) and (
             "_text" in field_value or "_tail" in field_value or "div" in field_value
         ):
@@ -262,8 +215,52 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             except json.JSONDecodeError:
                 return field_value
 
+        # Handle lists
+        if (
+            getattr(field_info.annotation, "__origin__", None) is list
+            and len(field_info.annotation.__args__) > 0
+        ):
+            return _process_list_field(field_value, field_info.annotation.__args__[0])
+
+        # Handle nested models
+        if hasattr(field_info.annotation, "model_fields"):
+            if isinstance(field_value, str):
+                return field_value
+
+            # Process nested fields recursively
+            processed_nested: dict = {}
+            for (
+                nested_field_name,
+                nested_field_info,
+            ) in field_info.annotation.model_fields.items():
+                if nested_field_name in field_value:
+                    nested_value = field_value[nested_field_name]
+                    # Always process nested fields through _process_field_value
+                    processed_nested[nested_field_name] = _process_field_value(
+                        nested_value, nested_field_info, nested_field_name
+                    )
+                else:
+                    # Initialize missing fields
+                    if (
+                        hasattr(nested_field_info.annotation, "__origin__")
+                        and nested_field_info.annotation.__origin__ is list
+                    ):
+                        processed_nested[nested_field_name] = []
+                    elif hasattr(nested_field_info.annotation, "model_fields"):
+                        processed_nested[nested_field_name] = {}
+
+            try:
+                return field_info.annotation(**processed_nested)
+            except Exception:
+                # If validation fails, try creating a partial model
+                partial_model = _create_partial_model(
+                    field_info.annotation, processed_nested
+                )
+                return partial_model(**processed_nested)
+
         return field_value
 
+    # Process each field in the model
     for field_name, field_info in model_fields.items():
         if field_name in data:
             processed[field_name] = _process_field_value(
