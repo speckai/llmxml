@@ -45,7 +45,7 @@ def test_simple_model_prompt():
         "<new_file_path>\n[type: str]\n[The path to the new file to create]\n</new_file_path>\n"
         "<file_contents>\n[type: str]\n[The contents of the new file to create]\n</file_contents>"
     )
-    result = generate_prompt_template(CreateAction)
+    result = generate_prompt_template(CreateAction, include_instructions=False)
     assert result == expected
 
 
@@ -96,5 +96,5 @@ def test_empty_model():
     class EmptyModel(BaseModel):
         pass
 
-    result = generate_prompt_template(EmptyModel)
+    result = generate_prompt_template(EmptyModel, include_instructions=False)
     assert result == ""
