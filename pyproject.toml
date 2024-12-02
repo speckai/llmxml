@@ -1,6 +1,6 @@
 [project]
 name = "llmxml"
-version = "0.2.2"
+version = "0.2.3"
 description = "XML parsing for LLM outputs"
 readme = "README.md"
 requires-python = ">=3.12"
