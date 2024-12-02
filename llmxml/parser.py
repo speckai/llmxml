@@ -90,31 +90,13 @@ def _xml_to_dict(element: ET.Element) -> any:
         if tag_counts[key] > 1:
             if key not in result:
                 result[key] = []
-            # Always wrap value in a list if it's not already one
-            if isinstance(value, list):
-                result[key].extend(value)
-            else:
-                result[key].append(value)
+            result[key].append(value)
         else:
-            # If value is a dict with a single key matching the parent tag,
-            # and that value is a list, use the list directly
-            if (
-                isinstance(value, dict)
-                and len(value) == 1
-                and key in value
-                and isinstance(value[key], list)
-            ):
-                result[key] = value[key]
-            else:
-                result[key] = value
+            result[key] = value
 
     # If this is the root element, flatten it
     if element.tag == "root":
         return {k: v for k, v in result.items() if not k.startswith("_")}
-
-    # If we have a list of identical child elements, return them as a list
-    if len(result) == 1 and isinstance(next(iter(result.values())), list):
-        return next(iter(result.values()))
 
     # If we only have text content, return it directly
     return result["_text"] if len(result) == 1 and "_text" in result else result
@@ -185,19 +167,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 field_value = values
             elif not isinstance(field_value, list):
                 field_value = [field_value]
-
-            # Handle string type in list
-            if item_type is str:
-                processed_items: list[str] = []
-                for item in field_value:
-                    if isinstance(item, dict):
-                        # Join all values in the dict
-                        processed_items.append(
-                            " - ".join(str(v) for v in item.values())
-                        )
-                    else:
-                        processed_items.append(str(item))
-                return processed_items
 
             # Handle Union type in list
             if getattr(item_type, "__origin__", None) == Union:
