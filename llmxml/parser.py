@@ -68,6 +68,10 @@ def _clean_xml(xml_content: str) -> str:
 def _xml_to_dict(element: ET.Element) -> any:
     result: dict[str, any] = {}
 
+    # Handle empty elements
+    if not element.text and not len(element):
+        return {}
+
     if element.text and element.text.strip():
         text: str = element.text.strip()
         if not len(element):
@@ -131,7 +135,17 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         field_value: any, field_info: any, field_name: str = None
     ) -> any:
         """Process a field value according to its type and annotation."""
-        if field_value is None:
+        # Handle empty or None values
+        if field_value is None or field_value == "":
+            # For nested models, return empty dict
+            if hasattr(field_info.annotation, "model_fields"):
+                return {}
+            # For list types, return empty list
+            elif (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is list
+            ):
+                return []
             return None
 
         # Handle lists
@@ -255,6 +269,13 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             processed[field_name] = _process_field_value(
                 data[field_name], field_info, field_name
             )
+        else:
+            # Initialize missing list fields with empty lists
+            if (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is list
+            ):
+                processed[field_name] = []
 
     return processed
 
@@ -321,6 +342,10 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> BaseModel:
             default = 0.0
         elif type_ is bool:
             default = False
+        elif hasattr(type_, "model_fields"):  # Handle nested models
+            nested_partial = _create_partial_model(type_, {})
+            default = nested_partial()
+            type_ = nested_partial
         else:
             default = None
 
