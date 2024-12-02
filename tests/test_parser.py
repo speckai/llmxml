@@ -122,9 +122,8 @@ def test_empty_response():
     assert len(result.actions) == 0
 
 
-def test_small_response():
-    xml = """
-    <response>
+def test_small_response_1():
+    xml = """<response>
 
     """
 
@@ -136,6 +135,64 @@ def test_small_response():
 
     result = parse_xml(ResponseObject, xml)
     assert result.response.movies == []
+
+
+def test_small_response_2():
+    xml = """<response>
+<
+    """
+
+    class Response(BaseModel):
+        movies: list[str] = Field(..., description="A list of movies")
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(..., description="The response object")
+
+    result = parse_xml(ResponseObject, xml)
+    assert result.response.movies == []
+
+
+def test_small_response_3():
+    xml = """<response>
+<movies
+    """
+
+    class Response(BaseModel):
+        movies: list[str] = Field(..., description="A list of movies")
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(..., description="The response object")
+
+    result = parse_xml(ResponseObject, xml)
+    assert result.response.movies == []
+
+
+def test_small_response_4():
+    xml = """<response>
+<movies>
+<movie>
+<title>Avatar
+    """
+
+    class Movie(BaseModel):
+        title: str = Field(..., description="The title of the movie")
+        director: str = Field(..., description="The director of the movie")
+
+    class Response(BaseModel):
+        movies: list[Movie] = Field(
+            ..., description="A list of movies that match the query"
+        )
+
+    class ResponseObject(BaseModel):
+        response: Response = Field(
+            ..., description="The response object that contains the movies"
+        )
+
+    result = parse_xml(ResponseObject, xml)
+    print(result.response.movies)
+    assert len(result.response.movies) == 1
+    assert result.response.movies[0].title == "Avatar"
+    assert result.response.movies[0].director == ""
 
 
 def test_code_blocks():

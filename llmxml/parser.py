@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Type, TypeVar, Union, get_type_hints
+from typing import Type, TypeVar, Union
 from xml.etree import ElementTree as ET
 
 from pydantic import BaseModel, create_model
@@ -90,13 +90,31 @@ def _xml_to_dict(element: ET.Element) -> any:
         if tag_counts[key] > 1:
             if key not in result:
                 result[key] = []
-            result[key].append(value)
+            # Always wrap value in a list if it's not already one
+            if isinstance(value, list):
+                result[key].extend(value)
+            else:
+                result[key].append(value)
         else:
-            result[key] = value
+            # If value is a dict with a single key matching the parent tag,
+            # and that value is a list, use the list directly
+            if (
+                isinstance(value, dict)
+                and len(value) == 1
+                and key in value
+                and isinstance(value[key], list)
+            ):
+                result[key] = value[key]
+            else:
+                result[key] = value
 
     # If this is the root element, flatten it
     if element.tag == "root":
         return {k: v for k, v in result.items() if not k.startswith("_")}
+
+    # If we have a list of identical child elements, return them as a list
+    if len(result) == 1 and isinstance(next(iter(result.values())), list):
+        return next(iter(result.values()))
 
     # If we only have text content, return it directly
     return result["_text"] if len(result) == 1 and "_text" in result else result
@@ -167,6 +185,19 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 field_value = values
             elif not isinstance(field_value, list):
                 field_value = [field_value]
+
+            # Handle string type in list
+            if item_type is str:
+                processed_items: list[str] = []
+                for item in field_value:
+                    if isinstance(item, dict):
+                        # Join all values in the dict
+                        processed_items.append(
+                            " - ".join(str(v) for v in item.values())
+                        )
+                    else:
+                        processed_items.append(str(item))
+                return processed_items
 
             # Handle Union type in list
             if getattr(item_type, "__origin__", None) == Union:
@@ -285,105 +316,90 @@ def _extract_partial_content(xml_str: str) -> dict:
     result: dict = {}
 
     # Find all top-level tags and their content
-    tag_pattern: re.Pattern = re.compile(r"<(\w+)>(.*?)(?:</\1>|$)", re.DOTALL)
+    tag_pattern: re.Pattern = re.compile(
+        r"<(\w+)(?:>([^<]*(?:(?!</\1>)<[^<]*)*?)(?:</\1>|$)|[^>]*$)", re.DOTALL
+    )
     matches: re.Iterator = tag_pattern.finditer(xml_str)
 
     for match in matches:
         tag_name: str = match.group(1)
-        content: str = match.group(2).strip()
+        # Content might be None for incomplete tags
+        content: str = match.group(2) if match.group(2) is not None else ""
+        content = content.strip()
+
+        # Skip incomplete tags or empty content
+        if not tag_name or not content:
+            continue
 
         # For nested content, try to parse it recursively
         if re.search(r"<\w+>", content):
             nested_content: dict = _extract_partial_content(content)
             if nested_content:
-                # If this tag appears multiple times, convert to list
                 if tag_name in result:
                     if not isinstance(result[tag_name], list):
                         result[tag_name] = [result[tag_name]]
-                    result[tag_name].append(nested_content)
+                    if isinstance(nested_content, dict):
+                        result[tag_name].append(nested_content)
+                    else:
+                        result[tag_name].extend(
+                            nested_content
+                            if isinstance(nested_content, list)
+                            else [nested_content]
+                        )
                 else:
-                    # Check if the nested content itself contains a list
-                    result[tag_name] = (
-                        next(iter(nested_content.values()))
-                        if len(nested_content) == 1
-                        and isinstance(next(iter(nested_content.values())), list)
-                        else nested_content
-                    )
-        elif tag_name in result:
-            if not isinstance(result[tag_name], list):
-                result[tag_name] = [result[tag_name]]
-            result[tag_name].append(content)
+                    result[tag_name] = nested_content
         else:
-            result[tag_name] = content
+            # Handle non-nested content
+            content = content.strip()
+            if content.startswith("<"):
+                continue
+
+            if tag_name in result:
+                if not isinstance(result[tag_name], list):
+                    result[tag_name] = [result[tag_name]]
+                result[tag_name].append(content)
+            else:
+                result[tag_name] = content
 
     return result
 
 
-def _create_partial_model(model: Type[BaseModel], data: dict) -> BaseModel:
+def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]:
     """Create a partial model with all fields optional."""
+    # Check if model is already a partial model
+    if model.__name__.startswith("Partial"):
+        return model
+
     model_name: str = model.__name__
     partial_name: str = f"Partial{model_name}"
 
     # Make all fields optional for partial model
     fields: dict = {}
-    for field, type_ in get_type_hints(model).items():
+    for field, field_info in model.model_fields.items():
         # Get default empty value based on type
-        if type_ is str:
+        if field_info.annotation is str:
             default = ""
-        elif type_ is list or (
-            hasattr(type_, "__origin__") and type_.__origin__ is list
+        elif field_info.annotation is list or (
+            hasattr(field_info.annotation, "__origin__")
+            and field_info.annotation.__origin__ is list
         ):
             default = []
-        elif type_ is dict:
+        elif field_info.annotation is dict:
             default = {}
-        elif type_ is int:
+        elif field_info.annotation is int:
             default = 0
-        elif type_ is float:
+        elif field_info.annotation is float:
             default = 0.0
-        elif type_ is bool:
+        elif field_info.annotation is bool:
             default = False
-        elif hasattr(type_, "model_fields"):  # Handle nested models
-            nested_partial = _create_partial_model(type_, {})
+        elif hasattr(field_info.annotation, "model_fields"):  # Handle nested models
+            nested_partial = _create_partial_model(field_info.annotation, {})
             default = nested_partial()
-            type_ = nested_partial
+            field_info.annotation = nested_partial
         else:
             default = None
 
-        if type_ is any:
-            fields[field] = (type_, default)
-        elif hasattr(type_, "__origin__"):
-            if type_.__origin__ is list:
-                # For list types, handle the element type
-                element_type = type_.__args__[0]
-                if (
-                    hasattr(element_type, "__origin__")
-                    and element_type.__origin__ == Union
-                ):
-                    # For Union types in lists, create a new Union with all types optional
-                    union_types = element_type.__args__
-                    partial_types: list = []
-                    for union_type in union_types:
-                        if hasattr(union_type, "model_fields"):
-                            partial_union_type = _create_partial_model(union_type, {})
-                            partial_types.append(partial_union_type)
-                        else:
-                            partial_types.append(union_type)
-                    fields[field] = (list[Union[tuple(partial_types)]], default)
-                else:
-                    fields[field] = (list[element_type], default)
-            elif type_.__origin__ == Union:
-                # For direct Union types, create a new Union with all types optional
-                union_types = type_.__args__
-                partial_types: list = []
-                for union_type in union_types:
-                    if hasattr(union_type, "model_fields"):
-                        partial_union_type = _create_partial_model(union_type, {})
-                        partial_types.append(partial_union_type)
-                    else:
-                        partial_types.append(union_type)
-                fields[field] = (Union[tuple(partial_types)], default)
-        else:
-            fields[field] = (type_ | None, default)
+        fields[field] = (field_info.annotation | None, default)
 
     return create_model(partial_name, __base__=BaseModel, **fields)
 
@@ -413,9 +429,6 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
         root: ET.Element = ET.fromstring(cleaned_xml)
         data: dict = _xml_to_dict(root)
     except ET.ParseError:
-        # If that fails, try to extract partial content
-        # print(f"Failed to parse XML: {str(e)}")
-        # TODO: Handle this better
         data = _extract_partial_content(xml_str)
 
     # Process the data according to the model's fields
@@ -428,9 +441,30 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
     try:
         return model(**processed_data)
     except Exception:
-        # If validation fails, return a partial model
-        partial_model = _create_partial_model(model, processed_data)
-        return partial_model(**processed_data)
+        # Create empty processed data with proper nested structure
+        empty_processed_data: dict = {}
+        for field_name, field_info in model.model_fields.items():
+            if hasattr(field_info.annotation, "model_fields"):
+                # For nested models, create a partial instance
+                nested_partial = _create_partial_model(field_info.annotation, {})
+                empty_processed_data[field_name] = nested_partial()
+            elif (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is list
+            ):
+                empty_processed_data[field_name] = []
+            else:
+                empty_processed_data[field_name] = None
+
+        # Create partial model with proper field types
+        partial_model = _create_partial_model(model, empty_processed_data)
+        instance = partial_model()
+
+        # Manually set each field to ensure proper typing
+        for field_name, value in empty_processed_data.items():
+            setattr(instance, field_name, value)
+
+        return instance
 
 
 if __name__ == "__main__":
