@@ -1,12 +1,42 @@
 import json
 import re
 from types import UnionType
-from typing import Type, TypeVar, Union
+from typing import Any, Type, TypeVar, Union
 from xml.etree import ElementTree as ET
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, create_model
+from pydantic_core import CoreSchema, core_schema
 
 T = TypeVar("T", bound=BaseModel)
+
+
+# Add CodeContent type definition
+class CodeContent(str):
+    """A custom type for code content that automatically wraps in CDATA."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetJsonSchemaHandler
+    ) -> CoreSchema:
+        return core_schema.json_or_python_schema(
+            json_schema=core_schema.str_schema(),
+            python_schema=core_schema.union_schema(
+                [
+                    core_schema.str_schema(),
+                    core_schema.no_info_plain_validator_function(cls.validate),
+                ]
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda x: x, return_schema=core_schema.str_schema()
+            ),
+        )
+
+    @classmethod
+    def validate(cls, v: Any) -> str:
+        if isinstance(v, dict):
+            # Handle nested structures by converting to string
+            return str(v)
+        return str(v)
 
 
 def _clean_xml(xml_content: str) -> str:
@@ -32,6 +62,8 @@ def _clean_xml(xml_content: str) -> str:
             r"return\s+",
             r"=>\s*{",
             r"{\s*[\w'\"]+:",
+            r"<[/\w]+>",  # Add pattern for HTML/JSX tags
+            r"[{<]",  # Add pattern for JSON and XML-like content
         ]
         return any(re.search(pattern, text, re.MULTILINE) for pattern in code_patterns)
 
