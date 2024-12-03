@@ -16,7 +16,12 @@ T = TypeVar("T", bound=BaseModel)
 
 # Add CodeContent type definition
 class XMLSafeString(str):
-    """A custom type for code content that automatically wraps in CDATA."""
+    """Wraps contents of this param in CDATA so it gets preserved. Used for any content that might contain brackets/xml-like tags that might break the parser.
+
+    Usage:
+    class MyModel(BaseModel):
+        content: XMLSafeString = Field(..., description="Some content that might contain jsx/html/xml tags")
+    """
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -37,15 +42,11 @@ class XMLSafeString(str):
 
     @classmethod
     def validate(cls, v: Any) -> str:
-        if isinstance(v, dict):
-            # Handle nested structures by converting to string
-            return str(v)
         return str(v)
 
 
 def _clean_xml(xml_content: str) -> str:
-    """Clean and complete partial XML if needed."""
-    # Strip content before first < and after last >
+    """Clean and complete partial XML."""
     xml_content = re.sub(r"^[^<]*", "", xml_content)
     xml_content = re.sub(r"[^>]*$", "", xml_content)
 
@@ -66,8 +67,8 @@ def _clean_xml(xml_content: str) -> str:
             r"return\s+",
             r"=>\s*{",
             r"{\s*[\w'\"]+:",
-            r"<[/\w]+>",  # Add pattern for HTML/JSX tags
-            r"[{<]",  # Add pattern for JSON and XML-like content
+            r"<[/\w]+>",  # HTML/JSX tags
+            r"[{<]",  # JSON/XML-like content
         ]
         return any(re.search(pattern, text, re.MULTILINE) for pattern in code_patterns)
 
@@ -90,12 +91,10 @@ def _clean_xml(xml_content: str) -> str:
 
         return f"<{tag_name}>{process_code_content(content)}</{tag_name}>"
 
-    # Process all tags recursively
     xml_content = re.sub(
         r"<(\w+)>(.*?)</\1>", process_tag_recursively, xml_content, flags=re.DOTALL
     )
 
-    # Wrap multiple root elements in a single root if needed
     if not xml_content.strip().startswith("<root>"):
         xml_content = f"<root>{xml_content}</root>"
 
@@ -105,7 +104,6 @@ def _clean_xml(xml_content: str) -> str:
 def _xml_to_dict(element: ET.Element) -> any:
     result: dict[str, any] | list[any] = {}
 
-    # Handle empty elements
     if not element.text and not len(element):
         return {}
 
@@ -118,12 +116,10 @@ def _xml_to_dict(element: ET.Element) -> any:
     child_tags: list[str] = [child.tag for child in element]
     tag_counts: dict[str, int] = {tag: child_tags.count(tag) for tag in set(child_tags)}
 
-    # Handle children
     for child in element:
         key: str = child.tag
         value: any = _xml_to_dict(child)
 
-        # If this tag appears multiple times, make it a list
         if tag_counts[key] > 1:
             if key not in result:
                 result[key] = []
@@ -135,12 +131,12 @@ def _xml_to_dict(element: ET.Element) -> any:
 
 
 def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
-    """Process dictionary to match model field types."""
+    """Match dictionary to model field types."""
     processed: dict = {}
     model_fields = model.model_fields
 
     def _reconstruct_text(value: dict) -> str:
-        """Recursively reconstruct text content from a dictionary of text parts."""
+        """Reconstruct text from dictionary parts."""
         if not isinstance(value, dict):
             return str(value)
 
@@ -148,7 +144,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         if "_text" in value:
             parts.append(value["_text"])
 
-        # Handle nested divs and other elements
         for key, content in value.items():
             if key not in ["_text", "_tail"]:
                 if isinstance(content, dict):
@@ -164,7 +159,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         return "".join(parts)
 
     def flatten_dict_values(d: Union[dict, list]) -> list:
-        """Helper function to flatten nested dictionaries into a list."""
+        """Flatten nested dictionaries into a list."""
         flattened = []
         if isinstance(d, dict):
             values = d.values()
@@ -173,12 +168,9 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
 
         for v in values:
             if isinstance(v, dict):
-                # If value is a dict, check if it's a wrapper (like 'movie')
                 if len(v) == 1 and isinstance(next(iter(v.values())), dict):
-                    # It's a wrapper, add the inner content
                     flattened.append(next(iter(v.values())))
                 else:
-                    # Regular dict, add as is
                     flattened.append(v)
             elif isinstance(v, list):
                 flattened.extend(v)
@@ -187,19 +179,14 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         return flattened
 
     def _process_list_field(field_value: any, item_type: Type) -> list:
-        """Process a field value as a list with given item type."""
-
-        # Convert to list if not already
+        """Process field value as a list with given item type."""
         if isinstance(field_value, dict):
-            # Handle nested structures by flattening them
             values = []
-            # If dict has a single key and its value is a list, use that list
             if len(field_value) == 1 and isinstance(
                 next(iter(field_value.values())), list
             ):
                 values = next(iter(field_value.values()))
             else:
-                # Otherwise process each value
                 for key, value in field_value.items():
                     if isinstance(value, list):
                         values.extend(value)
@@ -211,7 +198,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         elif not isinstance(field_value, list):
             field_value = [field_value]
 
-        # Process each item in the list according to its type
         processed_items = []
         for item in field_value:
             if hasattr(item_type, "model_fields"):
@@ -228,14 +214,10 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
     def _process_field_value(
         field_value: any, field_info: any, field_name: str = None
     ) -> any:
-        """Process a field value according to its type and annotation."""
-
-        # Handle empty or None values
+        """Process field value according to type and annotation."""
         if field_value is None or field_value == "":
-            # For nested models, return empty dict
             if hasattr(field_info.annotation, "model_fields"):
                 return {}
-            # For list types, return empty list
             elif (
                 hasattr(field_info.annotation, "__origin__")
                 and field_info.annotation.__origin__ is list
@@ -243,30 +225,25 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 return []
             return None
 
-        # Handle text content in dictionary first
         if isinstance(field_value, dict) and (
             "_text" in field_value or "_tail" in field_value
         ):
             return _reconstruct_text(field_value)
 
-        # Handle JSON strings in data fields
-        if (
-            field_name == "data"
-            and isinstance(field_value, str)
-            and field_value.strip().startswith("{")
-        ):
-            try:
-                return json.loads(field_value)
-            except json.JSONDecodeError:
-                return parser.parse(field_value)
+        if hasattr(field_info.annotation, "__args__"):
+            if any(
+                hasattr(arg, "__origin__") and arg.__origin__ is dict
+                for arg in field_info.annotation.__args__
+            ):
+                try:
+                    return json.loads(field_value)
+                except json.JSONDecodeError:
+                    return parser.parse(field_value)
 
-        # Handle lists
         if (
             getattr(field_info.annotation, "__origin__", None) is list
             and len(field_info.annotation.__args__) > 0
         ):
-            # If field_value is a dict with a single key whose value is a list,
-            # use that list directly
             if isinstance(field_value, dict) and len(field_value) == 1:
                 key = next(iter(field_value.keys()))
                 if isinstance(field_value[key], list):
@@ -274,29 +251,22 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             processed_list = _process_list_field(
                 field_value, field_info.annotation.__args__[0]
             )
-            # Convert any models in the list back to dicts
             return [
                 item.model_dump() if hasattr(item, "model_dump") else item
                 for item in processed_list
             ]
 
-        # Handle case where value is a dict but should be a list
         if hasattr(field_info.annotation, "__origin__"):
             if field_info.annotation.__origin__ is Union:
-                # Check if any of the Union types is a List
                 for arg in field_info.annotation.__args__:
-                    # Only check __origin__ if the arg has it
                     if hasattr(arg, "__origin__") and arg.__origin__ is list:
-                        # If field_value is a dict, wrap it in a list
                         if isinstance(field_value, dict):
                             return [field_value]
 
-        # Handle nested models
         if hasattr(field_info.annotation, "model_fields"):
             if isinstance(field_value, str):
                 return field_value
 
-            # Process nested fields recursively
             processed_nested: dict = {}
             for (
                 nested_field_name,
@@ -309,7 +279,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                     )
 
                     if type(nested_field_info.annotation) is UnionType:
-                        # Only check for list types if the arg has __origin__
                         list_args = [
                             arg
                             for arg in nested_field_info.annotation.__args__
@@ -320,7 +289,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                                 processed_nested[nested_field_name]
                             )
                 else:
-                    # Initialize missing fields
                     if (
                         hasattr(nested_field_info.annotation, "__origin__")
                         and nested_field_info.annotation.__origin__ is list
@@ -333,7 +301,6 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 model = field_info.annotation(**processed_nested)
                 return model.model_dump()
             except Exception:
-                # If validation fails, try creating a partial model
                 partial_model = _create_partial_model(
                     field_info.annotation, processed_nested
                 )
@@ -342,14 +309,12 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
 
         return field_value
 
-    # Process each field in the model
     for field_name, field_info in model_fields.items():
         if field_name in data:
             processed[field_name] = _process_field_value(
                 data[field_name], field_info, field_name
             )
         else:
-            # Initialize missing list fields with empty lists
             if (
                 hasattr(field_info.annotation, "__origin__")
                 and field_info.annotation.__origin__ is list
@@ -365,14 +330,13 @@ def _extract_partial_content(
     """Extract valid content from partial or malformed XML."""
     result: dict = {}
 
-    # Find all top-level tags and their content
     tag_pattern: re.Pattern = re.compile(
         r"<(\w+)(?:>([^<]*(?:(?!</\1>)<[^<]*)*?)(?:</\1>|$)|[^>]*$)", re.DOTALL
     )
     matches: re.Iterator = tag_pattern.finditer(xml_str)
 
     def get_field_type(tag: str) -> Type[BaseModel | str]:
-        """Get the expected type for a field based on the model fields"""
+        """Get expected type for a field based on model fields."""
         if hasattr(expected_type, "model_fields") and tag in expected_type.model_fields:
             field_info = expected_type.model_fields[tag]
             if hasattr(field_info.annotation, "model_fields"):
@@ -388,17 +352,14 @@ def _extract_partial_content(
 
     for match in matches:
         tag_name: str = match.group(1)
-        # Content might be None for incomplete tags
         content: str = match.group(2) if match.group(2) is not None else ""
         content = content.strip()
 
-        # Skip incomplete tags or empty content
         if not tag_name or not content:
             continue
 
         field_type = get_field_type(tag_name)
 
-        # For nested content, try to parse it recursively
         if re.search(r"<\w+>", content):
             nested_content: dict = _extract_partial_content(content, field_type)
             if nested_content:
@@ -416,7 +377,6 @@ def _extract_partial_content(
                 else:
                     result[tag_name] = nested_content
         else:
-            # Handle non-nested content
             content = content.strip()
             if content.startswith("<"):
                 continue
@@ -433,17 +393,14 @@ def _extract_partial_content(
 
 def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]:
     """Create a partial model with all fields optional."""
-    # Check if model is already a partial model
     if model.__name__.startswith("Partial"):
         return model
 
     model_name: str = model.__name__
     partial_name: str = f"Partial{model_name}"
 
-    # Make all fields optional for partial model
     fields: dict = {}
     for field, field_info in model.model_fields.items():
-        # Get default empty value based on type
         if field_info.annotation is str:
             default = ""
         elif field_info.annotation is list or (
@@ -454,11 +411,8 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
             if hasattr(field_info.annotation, "__args__"):
                 item_type = field_info.annotation.__args__[0]
                 if hasattr(item_type, "model_fields"):
-                    # Create a list type with partial model items
                     nested_partial = _create_partial_model(item_type, {})
-                    field_info.annotation = list[
-                        nested_partial
-                    ]  # Update the type annotation
+                    field_info.annotation = list[nested_partial]
         elif field_info.annotation is dict:
             default = {}
         elif field_info.annotation is int:
@@ -467,9 +421,8 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
             default = 0.0
         elif field_info.annotation is bool:
             default = False
-        elif hasattr(field_info.annotation, "model_fields"):  # Handle nested models
+        elif hasattr(field_info.annotation, "model_fields"):
             nested_partial = _create_partial_model(field_info.annotation, {})
-
             default = nested_partial()
             field_info.annotation = nested_partial
         else:
@@ -484,7 +437,6 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
     if not xml_str.strip():
         return _create_partial_model(model, {})()
 
-    # Try to parse as complete XML first
     cleaned_xml: str = _clean_xml(xml_str)
 
     try:
@@ -493,21 +445,17 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
     except ET.ParseError:
         data = _extract_partial_content(xml_str, model)
 
-    # Process the data according to the model's fields
     processed_data: dict = _process_dict_for_model(data, model)
 
-    # Create and return the model instance
     if not processed_data:
         return _create_partial_model(model, {})()
 
     try:
         return model(**processed_data)
     except Exception:
-        # Create empty processed data with proper nested structure
         empty_processed_data: dict = {}
         for field_name, field_info in model.model_fields.items():
             if hasattr(field_info.annotation, "model_fields"):
-                # For nested models, create a partial instance
                 nested_partial = _create_partial_model(field_info.annotation, {})
                 empty_processed_data[field_name] = nested_partial()
             elif (
@@ -518,11 +466,9 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
             else:
                 empty_processed_data[field_name] = None
 
-        # Create partial model with proper field types
         partial_model = _create_partial_model(model, empty_processed_data)
         instance = partial_model()
 
-        # Manually set each field to ensure proper typing
         for field_name, value in empty_processed_data.items():
             setattr(instance, field_name, value)
         return instance

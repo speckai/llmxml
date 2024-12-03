@@ -349,6 +349,11 @@ class TestCustom:
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CustomResponse)
         assert last_valid_result.status in ["success", "error"]
+        assert last_valid_result.result.type == "playlist_update"
+        assert isinstance(last_valid_result.result.data, dict)
+        assert "tracks" in last_valid_result.result.data
+        assert isinstance(last_valid_result.result.data["tracks"], list)
+        assert len(last_valid_result.result.data["tracks"]) > 0
 
 
 class ChunkInfo(BaseModel):
