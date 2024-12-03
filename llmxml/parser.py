@@ -1,5 +1,6 @@
 import json
 import re
+from types import UnionType
 from typing import Type, TypeVar, Union
 from xml.etree import ElementTree as ET
 
@@ -248,7 +249,14 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                 key = next(iter(field_value.keys()))
                 if isinstance(field_value[key], list):
                     field_value = field_value[key]
-            return _process_list_field(field_value, field_info.annotation.__args__[0])
+            processed_list = _process_list_field(
+                field_value, field_info.annotation.__args__[0]
+            )
+            # Convert any models in the list back to dicts
+            return [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in processed_list
+            ]
 
         # Handle case where value is a dict but should be a list
         if hasattr(field_info.annotation, "__origin__"):
@@ -277,29 +285,16 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                     processed_nested[nested_field_name] = _process_field_value(
                         nested_value, nested_field_info, nested_field_name
                     )
-                    # if the nested field is a list, flatten it
-                    if hasattr(nested_field_info.annotation, "__origin__"):
-                        if nested_field_info.annotation.__origin__ is Union:
-                            # Check if any of the Union types is a List
-                            for arg in nested_field_info.annotation.__args__:
-                                if (
-                                    hasattr(arg, "__origin__")
-                                    and arg.__origin__ is list
-                                ):
-                                    processed_nested[nested_field_name] = (
-                                        flatten_dict_values(
-                                            processed_nested[nested_field_name]
-                                        )
-                                    )
 
-                    # if (
-                    #     hasattr(nested_field_info.annotation, "__origin__")
-                    #     and nested_field_info.annotation.__origin__ is list
-                    # ):
-                    #     print("FLATTENING LIST", nested_field_name)
-                    #     processed_nested[nested_field_name] = flatten_dict_values(
-                    #         processed_nested[nested_field_name]
-                    #     )
+                    if type(nested_field_info.annotation) is UnionType:
+                        if any(
+                            arg.__origin__ is list
+                            for arg in nested_field_info.annotation.__args__
+                        ):
+                            print("FLATTENING LIST", nested_field_name)
+                            processed_nested[nested_field_name] = flatten_dict_values(
+                                processed_nested[nested_field_name]
+                            )
                 else:
                     # Initialize missing fields
                     if (
@@ -311,7 +306,8 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                         processed_nested[nested_field_name] = {}
 
             try:
-                return field_info.annotation(**processed_nested)
+                model = field_info.annotation(**processed_nested)
+                return model.model_dump()
             except Exception:
                 print("EXCEPTION FOR MODEL:", field_name)
                 # If validation fails, try creating a partial model
@@ -319,7 +315,8 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
                     field_info.annotation, processed_nested
                 )
                 print(processed_nested)
-                return partial_model(**processed_nested)
+                model = partial_model(**processed_nested)
+                return model.model_dump()
 
         return field_value
 
