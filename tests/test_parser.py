@@ -22,7 +22,6 @@ def validate_parsed_model(parsed: BaseModel, model_class: Type[T]) -> None:
         isinstance(parsed, model_class)
         or type(parsed).__name__.startswith(f"Partial{model_class.__name__}")
     ), f"Expected {model_class.__name__} or Partial{model_class.__name__}, got {type(parsed).__name__}"
-    # Validate model can be serialized/deserialized
     json_str = parsed.model_dump_json()
     assert json.loads(json_str), "Model should be JSON serializable"
 
@@ -65,23 +64,19 @@ class TestActions:
         xml = load_test_file("complete.xml")
         result = parse_xml(CodeAction, xml)
 
-        # More detailed assertions
         assert result.thinking.strip() != ""
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
 
-        # Validate first action (CreateAction)
         create_action = result.actions[0]
         assert create_action.new_file_path.endswith(".tsx")
         assert "import" in create_action.file_contents
         assert "SearchBar" in create_action.file_contents
 
-        # Validate second action (CommandAction)
         command_action = result.actions[1]
         assert "npm install" in command_action.command
         assert "lodash" in command_action.command
 
-        # Validate third action (EditAction)
         edit_action = result.actions[2]
         assert edit_action.original_file_path.endswith(".tsx")
         assert "SearchBar" in edit_action.new_file_contents
@@ -106,11 +101,9 @@ class TestActions:
         xml = load_test_file("partial.xml")
         result = parse_xml(CodeAction, xml)
 
-        # Validate thinking section
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
 
-        # Validate the single action
         assert len(result.actions) == 1
         action = result.actions[0]
         assert isinstance(action, CreateAction)
@@ -138,14 +131,12 @@ class TestActions:
         xml = load_test_file("streaming.xml")
         result = parse_xml(CodeAction, xml)
 
-        # Validate thinking structure
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
         assert all(
             item in result.thinking for item in ["Play/pause button", "Volume control"]
         )
 
-        # Validate partial action
         assert len(result.actions) == 1
         action = result.actions[0]
         assert isinstance(action, CreateAction)
@@ -284,11 +275,10 @@ class TestDetails:
         xml = load_test_file("details.xml")
         result = parse_xml(Details, xml)
 
-        # Additional validations
-        assert len(result.birth_date.split("-")) == 3  # Validate date format
+        assert len(result.birth_date.split("-")) == 3
         assert result.age > 0
-        assert "," in result.birth_place  # City, State format
-        assert result.occupation.count(",") <= 1  # At most one comma in occupation
+        assert "," in result.birth_place
+        assert result.occupation.count(",") <= 1
 
     def test_details_streaming(self):
         xml = load_test_file("details.xml")
@@ -322,7 +312,6 @@ class TestCustom:
         xml = load_test_file("custom.xml")
         result = parse_xml(CustomResponse, xml)
 
-        # Validate nested structure
         assert isinstance(result, CustomResponse)
         assert result.status in ["success", "error"]
         assert result.result.type == "playlist_update"
@@ -331,7 +320,6 @@ class TestCustom:
         assert isinstance(result.result.data["tracks"], list)
         assert len(result.result.data["tracks"]) > 0
 
-        # Validate track structure
         track = result.result.data["tracks"][0]
         assert all(key in track for key in ["id", "title", "artist"])
 
