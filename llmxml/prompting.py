@@ -4,21 +4,127 @@ from pydantic import BaseModel, Field
 
 
 def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
-    return f"""
+    return (
+        """
 You are to provide your output in the following xml-like format EXACTLY as described in the schema provided.
 
 Each field in the schema has a description and a type enclosed in square brackets, denoting that they are metadata.
+
 Format instructions:
 <field_name>
-[python_type]
+[object_type]
 [description]
 </field_name>
 
-Response Schema:
+
+Basic example:
+
+<EXAMPLE>
+<EXAMPLE_SCHEMA>
+<thinking>
+[type: str]
+[Chain of thought]
+</thinking>
+<actions>
+<action>
+# Option 1: CommandAction
+<action_type>
+[type: Literal["command"]]
+[The type of action to perform]
+</action_type>
+<command>
+[type: str]
+[The command to run]
+</command>
+</action>
+
+OR
+
+<action>
+# Option 2: CreateAction
+<action_type>
+[type: Literal["create"]]
+[The type of action to perform]
+</action_type>
+<new_file_path>
+[type: str]
+[The path to the new file to create]
+</new_file_path>
+<file_contents>
+[type: str]
+[The contents of the new file to create]
+</file_contents>
+</action>
+
+OR
+
+<action>
+# Option 3: EditAction
+<action_type>
+[type: Literal["edit"]]
+[The type of action to perform]
+</action_type>
+<original_file_path>
+[type: str]
+[The path to the original file to edit]
+</original_file_path>
+<new_file_contents>
+[type: str]
+[The contents of the edited file]
+</new_file_contents>
+</action>
+</actions>
+</EXAMPLE_SCHEMA>
+
+<EXAMPLE_OUTPUT>
+<thinking>
+First, I need to create a new configuration file. Then, I'll modify an existing source file to use the new configuration.
+</thinking>
+<actions>
+<action>
+<action_type>create</action_type>
+<new_file_path>config/settings.json</new_file_path>
+<file_contents>interface Config {
+  apiKey: string;
+  baseUrl: string;
+  timeout: number;
+}
+
+const config: Config = {
+  apiKey: "your-api-key-here",
+  baseUrl: "https://api.example.com",
+  timeout: 30
+};</file_contents>
+</action>
+
+<action>
+<action_type>edit</action_type>
+<original_file_path>src/main.py</original_file_path>
+<new_file_contents>import json
+
+def load_config():
+    with open('config/settings.json', 'r') as f:
+        return json.load(f)
+
+def main():
+    config = load_config()
+    print(f"Connecting to {config['base_url']}...")
+
+if __name__ == '__main__':
+    main()</new_file_contents>
+</action>
+</actions>
+</EXAMPLE_OUTPUT>
+</EXAMPLE>
+""".strip()
+        + "\n\n"
+        + f"""
+Requested Response Schema:
 {schema}
 
 Make sure to return an instance of the output, NOT the schema itself. Do NOT include any schema metadata (like [type: ...]) in your output.
 """.strip()
+    )
 
 
 def _get_type_info(field_info) -> str:
