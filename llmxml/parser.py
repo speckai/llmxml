@@ -66,8 +66,6 @@ def _clean_xml(xml_content: str) -> str:
 
 
 def _xml_to_dict(element: ET.Element) -> any:
-    print("\n=== XML TO DICT ===")
-    print(f"Processing element: {element.tag}")
     result: dict[str, any] | list[any] = {}
 
     # Handle empty elements
@@ -99,6 +97,7 @@ def _xml_to_dict(element: ET.Element) -> any:
             result[key].append(value)
         else:
             result[key] = value
+        print(result)
 
     print(f"Final result for {element.tag}: {result}")
     return result
@@ -341,7 +340,9 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
     return processed
 
 
-def _extract_partial_content(xml_str: str) -> dict:
+def _extract_partial_content(
+    xml_str: str, expected_type: Type[BaseModel | str]
+) -> dict:
     """Extract valid content from partial or malformed XML."""
     result: dict = {}
 
@@ -350,6 +351,21 @@ def _extract_partial_content(xml_str: str) -> dict:
         r"<(\w+)(?:>([^<]*(?:(?!</\1>)<[^<]*)*?)(?:</\1>|$)|[^>]*$)", re.DOTALL
     )
     matches: re.Iterator = tag_pattern.finditer(xml_str)
+
+    def get_field_type(tag: str) -> Type[BaseModel | str]:
+        """Get the expected type for a field based on the model fields"""
+        if hasattr(expected_type, "model_fields") and tag in expected_type.model_fields:
+            field_info = expected_type.model_fields[tag]
+            if hasattr(field_info.annotation, "model_fields"):
+                return field_info.annotation
+            if (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is list
+                and hasattr(field_info.annotation, "__args__")
+                and hasattr(field_info.annotation.__args__[0], "model_fields")
+            ):
+                return field_info.annotation.__args__[0]
+        return str
 
     for match in matches:
         tag_name: str = match.group(1)
@@ -361,9 +377,12 @@ def _extract_partial_content(xml_str: str) -> dict:
         if not tag_name or not content:
             continue
 
+        field_type = get_field_type(tag_name)
+        print(f"Tag: {tag_name}, Field type: {field_type}")
+
         # For nested content, try to parse it recursively
         if re.search(r"<\w+>", content):
-            nested_content: dict = _extract_partial_content(content)
+            nested_content: dict = _extract_partial_content(content, field_type)
             if nested_content:
                 if tag_name in result:
                     if not isinstance(result[tag_name], list):
@@ -446,15 +465,11 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
 
 
 def parse_xml(model: Type[T], xml_str: str) -> T:
-    print("\n=== PARSE XML ===")
-    print(f"Input XML: {xml_str[:100]}...")
-
     if not xml_str.strip():
         return _create_partial_model(model, {})()
 
     # Try to parse as complete XML first
     cleaned_xml: str = _clean_xml(xml_str)
-    print(f"\nCleaned XML: {cleaned_xml[:100]}...")
 
     try:
         root: ET.Element = ET.fromstring(cleaned_xml)
@@ -463,7 +478,7 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
         print(f"\nParsed data: {data}")
     except ET.ParseError as e:
         print(f"XML Parse error: {e}")
-        data = _extract_partial_content(xml_str)
+        data = _extract_partial_content(xml_str, model)
         print(f"Extracted partial content: {data}")
 
     # Process the data according to the model's fields
