@@ -5,7 +5,6 @@ description = "XML parsing for LLM outputs"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "partial-json-parser>=0.2.1.1.post4",
     "partialjson>=0.0.8",
     "pydantic>=2.10.2",
 ]
