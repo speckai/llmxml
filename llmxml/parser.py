@@ -231,12 +231,17 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             return _reconstruct_text(field_value)
 
         if hasattr(field_info.annotation, "__args__"):
-            if any(
+            if (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is dict
+            ) or any(
                 hasattr(arg, "__origin__") and arg.__origin__ is dict
                 for arg in field_info.annotation.__args__
             ):
                 try:
-                    return json.loads(field_value)
+                    if isinstance(field_value, str):
+                        return json.loads(field_value)
+                    return field_value
                 except json.JSONDecodeError:
                     return parser.parse(field_value)
 

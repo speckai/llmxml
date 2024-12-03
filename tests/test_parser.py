@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Type, TypeVar, Union
+from typing import Any, Literal, Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
 
@@ -54,7 +54,7 @@ class CommandAction(BaseModel):
 
 class CodeAction(BaseModel):
     thinking: str = Field(default="", description="The thinking to perform")
-    actions: List[Union[CreateAction, EditAction, CommandAction]] = Field(
+    actions: list[Union[CreateAction, EditAction, CommandAction]] = Field(
         default_factory=list, description="The actions to perform"
     )
 
@@ -308,7 +308,7 @@ class TestDetails:
 
 class Result(BaseModel):
     type: str = Field(...)
-    data: Dict[str, Any] = Field(...)
+    data: dict[str, Any] = Field(...)
 
 
 class CustomResponse(BaseModel):
@@ -323,6 +323,7 @@ class TestCustom:
         result = parse_xml(CustomResponse, xml)
 
         # Validate nested structure
+        assert isinstance(result, CustomResponse)
         assert result.status in ["success", "error"]
         assert result.result.type == "playlist_update"
         assert isinstance(result.result.data, dict)
