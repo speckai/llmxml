@@ -68,7 +68,7 @@ def _clean_xml(xml_content: str) -> str:
 def _xml_to_dict(element: ET.Element) -> any:
     print("\n=== XML TO DICT ===")
     print(f"Processing element: {element.tag}")
-    result: dict[str, any] = {}
+    result: dict[str, any] | list[any] = {}
 
     # Handle empty elements
     if not element.text and not len(element):
@@ -91,7 +91,6 @@ def _xml_to_dict(element: ET.Element) -> any:
     for child in element:
         key: str = child.tag
         value: any = _xml_to_dict(child)
-        print(f"Child {key}: {value}")
 
         # If this tag appears multiple times, make it a list
         if tag_counts[key] > 1:
@@ -110,7 +109,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
     processed: dict = {}
     model_fields = model.model_fields
 
-    print(f"\nProcessing model: {model.__name__}")
+    print(f"\nProcessing model: {model.__name__} with data: {data}")
 
     def _reconstruct_text(value: dict) -> str:
         """Recursively reconstruct text content from a dictionary of text parts."""
@@ -168,16 +167,20 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             print(f"Field value is dict: {field_value}")
             # Handle nested structures by flattening them
             values = []
-            for key, value in field_value.items():
-                if isinstance(value, dict):
-                    if len(value) == 1 and next(iter(value.keys())) == key:
-                        values.append(next(iter(value.values())))
-                    else:
+            # If dict has a single key and its value is a list, use that list
+            if len(field_value) == 1 and isinstance(
+                next(iter(field_value.values())), list
+            ):
+                values = next(iter(field_value.values()))
+            else:
+                # Otherwise process each value
+                for key, value in field_value.items():
+                    if isinstance(value, list):
+                        values.extend(value)
+                    elif isinstance(value, dict):
                         values.append(value)
-                elif isinstance(value, list):
-                    values.extend(value)
-                else:
-                    values.append({key: value})
+                    else:
+                        values.append({key: value})
             field_value = values
         elif not isinstance(field_value, list):
             field_value = [field_value]
@@ -187,16 +190,11 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         for item in field_value:
             if hasattr(item_type, "model_fields"):
                 try:
-                    # If item is a dict with a single key that matches our type name,
-                    # use its value instead
-                    if isinstance(item, dict) and len(item) == 1:
-                        key = next(iter(item.keys()))
-                        if key.lower() == item_type.__name__.lower():
-                            item = item[key]
                     processed_item = _process_dict_for_model(item, item_type)
                     model_instance = item_type(**processed_item)
                     processed_items.append(model_instance)
-                except Exception:
+                except Exception as e:
+                    print(f"Error processing list item: {e}")
                     continue
             else:
                 processed_items.append(item)
@@ -207,6 +205,7 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
     ) -> any:
         """Process a field value according to its type and annotation."""
         print(f"\nProcessing field: {field_name}")
+        print(f"Field info: {field_info}")
         if hasattr(field_info.annotation, "__origin__"):
             print(f"Field annotation origin: {field_info.annotation.__origin__}")
         # Handle empty or None values
@@ -243,6 +242,13 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
             getattr(field_info.annotation, "__origin__", None) is list
             and len(field_info.annotation.__args__) > 0
         ):
+            # If field_value is a dict with a single key whose value is a list,
+            # use that list directly
+            print("Processing list field")
+            if isinstance(field_value, dict) and len(field_value) == 1:
+                key = next(iter(field_value.keys()))
+                if isinstance(field_value[key], list):
+                    field_value = field_value[key]
             return _process_list_field(field_value, field_info.annotation.__args__[0])
 
         # Handle case where value is a dict but should be a list
@@ -410,11 +416,14 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
             and field_info.annotation.__origin__ is list
         ):
             default = []
-            if hasattr(field_info.annotation.__args__[0], "model_fields"):
-                # Make it a partial model
-                field_info.annotation = _create_partial_model(
-                    field_info.annotation.__args__[0], {}
-                )
+            if hasattr(field_info.annotation, "__args__"):
+                item_type = field_info.annotation.__args__[0]
+                if hasattr(item_type, "model_fields"):
+                    # Create a list type with partial model items
+                    nested_partial = _create_partial_model(item_type, {})
+                    field_info.annotation = list[
+                        nested_partial
+                    ]  # Update the type annotation
         elif field_info.annotation is dict:
             default = {}
         elif field_info.annotation is int:
