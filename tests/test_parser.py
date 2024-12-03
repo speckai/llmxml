@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
 
-from llmxml.parser import CodeContent, parse_xml
+from llmxml.parser import XMLSafeString, parse_xml
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -171,7 +171,6 @@ class TestActions:
         """Test parsing an empty response."""
         xml = ""
         result = parse_xml(CodeAction, xml)
-        print(result.model_dump_json(indent=2))
         assert result.thinking == ""
         assert len(result.actions) == 0
 
@@ -339,6 +338,7 @@ class TestCustom:
         xml = load_test_file("custom.xml")
         partial_content = ""
         last_valid_result = None
+
         for char in xml:
             partial_content += char
             result = parse_xml(CustomResponse, partial_content)
@@ -353,7 +353,7 @@ class TestCustom:
 
 class ChunkInfo(BaseModel):
     file_path: str = Field(..., description="The path of the file")
-    content: CodeContent = Field(..., description="The content of the chunk")
+    content: XMLSafeString = Field(..., description="The content of the chunk")
 
 
 class SearchResult(BaseModel):
