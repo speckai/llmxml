@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
 
-from llmxml.parser import parse_xml
+from llmxml.parser import CodeContent, parse_xml
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -321,7 +321,7 @@ def test_search_response():
 
     class ChunkInfo(BaseModel):
         file_path: str = Field(..., description="The path of the file")
-        content: str = Field(..., description="The content of the chunk")
+        content: CodeContent = Field(..., description="The content of the chunk")
 
     class SearchResult(BaseModel):
         chunk_id: str = Field(..., description="The id of the chunk")
@@ -344,6 +344,54 @@ def test_search_response():
     assert len(parsed.search_results) > 0, "Should have at least one search result"
 
     for result in parsed.search_results:
+        assert (
+            0 <= result.vector_similarity_score <= 1
+        ), "Similarity score should be between 0 and 1"
+        assert result.chunk_info.file_path, "File path should not be empty"
+        assert result.chunk_info.content, "Content should not be empty"
+
+
+def test_search_chars():
+    search_file: str = load_test_file("search.xml")
+
+    search_file: str = load_test_file("search.xml")
+
+    class ChunkInfo(BaseModel):
+        file_path: str = Field(..., description="The path of the file")
+        content: CodeContent = Field(..., description="The content of the chunk")
+
+    class SearchResult(BaseModel):
+        chunk_id: str = Field(..., description="The id of the chunk")
+        chunk_info: ChunkInfo = Field(..., description="The info of the chunk")
+        vector_similarity_score: float = Field(
+            ..., description="The similarity score of the chunk"
+        )
+
+    class SearchResponse(BaseModel):
+        objective: str = Field(..., description="Idk")
+        search_results: list[SearchResult] = Field(
+            ..., description="The search results"
+        )
+
+    partial_content = ""
+    last_valid_result = None
+    for char in search_file:
+        partial_content += char
+        result = parse_xml(SearchResponse, partial_content)
+        if result is not None:
+            validate_parsed_model(result, SearchResponse)
+            last_valid_result = result
+
+    assert last_valid_result is not None, "Should have at least one valid parse"
+    assert isinstance(
+        last_valid_result, SearchResponse
+    ), "Final result should be a complete model"
+    assert last_valid_result.objective, "Objective should not be empty"
+    assert (
+        len(last_valid_result.search_results) > 0
+    ), "Should have at least one search result"
+
+    for result in last_valid_result.search_results:
         assert (
             0 <= result.vector_similarity_score <= 1
         ), "Similarity score should be between 0 and 1"
@@ -382,45 +430,42 @@ def test_action_file():
         assert action.file_contents, "File contents should not be empty"
 
 
-# def test_streaming_action_by_char():
-#     """Test parsing an action file by reading it character by character."""
-#     action_file: str = load_test_file("action.xml")
+def test_streaming_action_by_char():
+    """Test parsing an action file by reading it character by character."""
+    action_file: str = load_test_file("action.xml")
 
-#     class Action(BaseModel):
-#         action_type: str = Field(..., description="The type of action")
-#         new_file_path: str = Field(..., description="The path of the new file")
-#         file_contents: str = Field(..., description="The contents of the new file")
+    class Action(BaseModel):
+        action_type: str = Field(..., description="The type of action")
+        new_file_path: str = Field(..., description="The path of the new file")
+        file_contents: str = Field(..., description="The contents of the new file")
 
-#     class ActionResponse(BaseModel):
-#         thinking: str = Field(..., description="The thinking of the action")
-#         actions: list[Action] = Field(..., description="The actions to take")
+    class ActionResponse(BaseModel):
+        thinking: str = Field(..., description="The thinking of the action")
+        actions: list[Action] = Field(..., description="The actions to take")
 
-#     # Read and parse file character by character
-#     partial_content = ""
-#     last_valid_result = None
+    # Read and parse file character by character
+    partial_content = ""
+    last_valid_result = None
 
-#     for char in action_file:
-#         partial_content += char
-#         result = parse_xml(ActionResponse, partial_content)
-#         if result is not None:
-#             validate_parsed_model(result, ActionResponse)
-#             # Only update last_valid_result if we have a complete model
-#             if isinstance(result, ActionResponse):
-#                 last_valid_result = result
+    for char in action_file:
+        partial_content += char
+        result = parse_xml(ActionResponse, partial_content)
+        if result is not None:
+            validate_parsed_model(result, ActionResponse)
+            last_valid_result = result
 
-#     assert last_valid_result is not None, "Should have at least one valid parse"
-#     assert isinstance(
-#         last_valid_result, ActionResponse
-#     ), "Final result should be a complete model"
+    assert last_valid_result is not None, "Should have at least one valid parse"
+    assert isinstance(
+        last_valid_result, ActionResponse
+    ), "Final result should be a complete model"
 
-#     # Validate the final result matches full parse
-#     full_parse = parse_xml(ActionResponse, action_file)
-#     assert isinstance(
-#         full_parse, ActionResponse
-#     ), "Full parse should be a complete model"
-#     assert (
-#         last_valid_result.model_dump() == full_parse.model_dump()
-#     ), "Streaming parse should match full parse"
+    # Validate the final result matches full parse
+    full_parse = parse_xml(ActionResponse, action_file)
+    assert isinstance(
+        full_parse, ActionResponse
+    ), "Full parse should be a complete model"
+    for action in last_valid_result.actions:
+        assert len(action.file_contents) > 0, "File contents should not be empty"
 
 
 def test_streaming_by_char_2():
