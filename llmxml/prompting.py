@@ -129,6 +129,9 @@ Make sure to return an instance of the output, NOT the schema itself. Do NOT inc
 
 def _get_type_info(field_info) -> str:
     """Extract and format the type information from a field."""
+    if field_info.annotation.__name__ == "XMLSafeString":
+        return "type: str"
+
     if hasattr(field_info.annotation, "__origin__"):
         origin = field_info.annotation.__origin__
         if origin is Literal:
