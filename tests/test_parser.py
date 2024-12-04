@@ -2,9 +2,8 @@ import json
 from pathlib import Path
 from typing import Any, Literal, Type, TypeVar, Union
 
-from pydantic import BaseModel, Field
-
 from llmxml.parser import XMLSafeString, parse_xml
+from pydantic import BaseModel, Field
 
 T = TypeVar("T", bound=BaseModel)
 
