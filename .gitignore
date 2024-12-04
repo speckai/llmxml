@@ -163,3 +163,4 @@ cython_debug/
 
 # Temp tests
 tests/test_temp*
+tests/test_files_temp*
