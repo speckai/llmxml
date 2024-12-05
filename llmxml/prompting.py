@@ -26,8 +26,8 @@ Basic example:
 [Chain of thought]
 </thinking>
 <actions>
-<action>
 # Option 1: CommandAction
+<command_action>
 <action_type>
 [type: Literal["command"]]
 [The type of action to perform]
@@ -36,12 +36,13 @@ Basic example:
 [type: str]
 [The command to run]
 </command>
-</action>
+</command_action>
 
 OR
 
 <action>
 # Option 2: CreateAction
+<create_action>
 <action_type>
 [type: Literal["create"]]
 [The type of action to perform]
@@ -54,12 +55,12 @@ OR
 [type: str]
 [The contents of the new file to create]
 </file_contents>
-</action>
+</create_action>
 
 OR
 
-<action>
 # Option 3: EditAction
+<edit_action>
 <action_type>
 [type: Literal["edit"]]
 [The type of action to perform]
@@ -72,7 +73,8 @@ OR
 [type: str]
 [The contents of the edited file]
 </new_file_contents>
-</action>
+</edit_action>
+
 </actions>
 </EXAMPLE_SCHEMA>
 
@@ -81,7 +83,7 @@ OR
 First, I need to create a new configuration file. Then, I'll modify an existing source file to use the new configuration.
 </thinking>
 <actions>
-<action>
+<create_action>
 <action_type>create</action_type>
 <new_file_path>config/settings.json</new_file_path>
 <file_contents>interface Config {
@@ -95,9 +97,9 @@ const config: Config = {
   baseUrl: "https://api.example.com",
   timeout: 30
 };</file_contents>
-</action>
+</create_action>
 
-<action>
+<edit_action>
 <action_type>edit</action_type>
 <original_file_path>src/main.py</original_file_path>
 <new_file_contents>import json
@@ -112,7 +114,7 @@ def main():
 
 if __name__ == '__main__':
     main()</new_file_contents>
-</action>
+</edit_action>
 </actions>
 </EXAMPLE_OUTPUT>
 </EXAMPLE>
@@ -155,12 +157,18 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
         for idx, subtype in enumerate(subtypes, 1):
             if isinstance(subtype, type) and issubclass(subtype, BaseModel):
                 subfields = subtype.model_fields
+                # Convert CamelCase to snake_case for the model name
+                model_name = "".join(
+                    ["_" + c.lower() if c.isupper() else c for c in subtype.__name__]
+                ).lstrip("_")
                 subtype_fields.append(
                     f"\n# Option {idx}: {subtype.__name__}"
+                    + f"\n<{model_name}>"
                     + "\n"
                     + "\n".join(
                         _process_field(name, info) for name, info in subfields.items()
                     )
+                    + f"\n</{model_name}>"
                     + "\n"
                 )
         description = field_info.description or f"Description of {field_name}"
