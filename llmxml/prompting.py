@@ -1,3 +1,4 @@
+import types
 from typing import List, Literal, Type, Union, get_args
 
 from pydantic import BaseModel, Field
@@ -131,8 +132,22 @@ Make sure to return an instance of the output, NOT the schema itself. Do NOT inc
 
 def _get_type_info(field_info) -> str:
     """Extract and format the type information from a field."""
-    if field_info.annotation.__name__ == "XMLSafeString":
+    if (
+        hasattr(field_info.annotation, "__name__")
+        and field_info.annotation.__name__ == "XMLSafeString"
+    ):
         return "type: str"
+
+    if (
+        hasattr(field_info.annotation, "__origin__")
+        and field_info.annotation.__origin__ is Union
+    ) or (isinstance(field_info.annotation, types.UnionType)):
+        subtypes = get_args(field_info.annotation)
+        type_names = [
+            t.__name__ if hasattr(t, "__name__") else str(t).replace("NoneType", "None")
+            for t in subtypes
+        ]
+        return f"type: {' | '.join(type_names)}"
 
     if hasattr(field_info.annotation, "__origin__"):
         origin = field_info.annotation.__origin__
@@ -145,6 +160,7 @@ def _get_type_info(field_info) -> str:
                 subtypes = get_args(args)
                 type_names = [t.__name__ for t in subtypes]
                 return f"type: list of {', '.join(map(repr, type_names))}"
+
     return f"type: {field_info.annotation.__name__}"
 
 
