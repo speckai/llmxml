@@ -17,8 +17,6 @@ T = TypeVar("T", bound=BaseModel)
 # Add CodeContent type definition
 class XMLSafeString(str):
     """Wraps contents of this param in CDATA so it gets preserved. Used for any content that might contain brackets/xml-like tags that might break the parser.
-    tl;dr just a string
-
     Usage:
     class MyModel(BaseModel):
         content: XMLSafeString = Field(..., description="Some content that might contain jsx/html/xml tags")
@@ -52,11 +50,32 @@ def _clean_xml(xml_content: str) -> str:
     xml_content = re.sub(r"[^>]*$", "", xml_content)
 
     def wrap_in_cdata(text: str) -> str:
-        text = text.replace("]]>", "]]]]><![CDATA[>")
-        return f"<![CDATA[{text}]]>"
+        if re.search(r"[<>&]", text):
+            if text.startswith("<![CDATA[") and text.endswith("]]>"):
+                return text
+            text = text.replace("]]>", "]]]]><![CDATA[>")
+            return f"<![CDATA[{text}]]>"
+        return text
+
+    def is_code_content(text: str) -> bool:
+        code_patterns: list[str] = [
+            r"import\s+[{\w]",
+            r"class\s+\w+",
+            r"function\s+\w+",
+            r"const\s+\w+",
+            r"let\s+\w+",
+            r"var\s+\w+",
+            r"return\s+",
+            r"=>\s*{",
+            r"{\s*[\w'\"]+:",
+            r"<[/\w]+>",  # HTML/JSX tags
+            r"[{<&]",  # JSON/XML-like content
+            r"&[a-zA-Z]+;",  # HTML entities
+        ]
+        return any(re.search(pattern, text, re.MULTILINE) for pattern in code_patterns)
 
     def process_code_content(text: str) -> str:
-        return wrap_in_cdata(text)
+        return wrap_in_cdata(text) if is_code_content(text) else text
 
     def process_tag_recursively(match: re.Match) -> str:
         tag_name: str = match[1]
