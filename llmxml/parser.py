@@ -217,6 +217,18 @@ def _process_dict_for_model(data: dict, model: Type[BaseModel]) -> dict:
         field_value: any, field_info: any, field_name: str = None
     ) -> any:
         """Process field value according to type and annotation."""
+
+        if isinstance(field_value, dict) and len(field_value) == 0:
+            if (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is Union
+            ):
+                if type(None) in field_info.annotation.__args__:
+                    return None
+            elif hasattr(field_info.annotation, "__args__"):
+                if type(None) in field_info.annotation.__args__:
+                    return None
+
         if field_value is None or field_value == "":
             if hasattr(field_info.annotation, "model_fields"):
                 return {}
@@ -453,13 +465,14 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
         data = _extract_partial_content(xml_str, model)
 
     processed_data: dict = _process_dict_for_model(data, model)
+    # print(processed_data)
 
     if not processed_data:
         return _create_partial_model(model, {})()
 
     try:
         return model(**processed_data)
-    except Exception:
+    except Exception as _e:
         empty_processed_data: dict = {}
         for field_name, field_info in model.model_fields.items():
             if hasattr(field_info.annotation, "model_fields"):
