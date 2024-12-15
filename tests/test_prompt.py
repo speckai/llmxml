@@ -41,9 +41,9 @@ class Action(BaseModel):
 def test_simple_model_prompt():
     """Test prompt generation for a simple model with basic fields."""
     expected = (
-        "<action_type>\n[type: Literal[create]]\n[The type of action to perform]\n</action_type>\n"
-        "<new_file_path>\n[type: str]\n[The path to the new file to create]\n</new_file_path>\n"
-        "<file_contents>\n[type: str]\n[The contents of the new file to create]\n</file_contents>"
+        "<action_type>\n[type: Literal[create]]\n[required]\n[The type of action to perform]\n</action_type>\n"
+        "<new_file_path>\n[type: str]\n[required]\n[The path to the new file to create]\n</new_file_path>\n"
+        "<file_contents>\n[type: str]\n[required]\n[The contents of the new file to create]\n</file_contents>"
     )
     result = generate_prompt_template(CreateAction, include_instructions=False)
     assert result == expected
@@ -98,3 +98,20 @@ def test_empty_model():
 
     result = generate_prompt_template(EmptyModel, include_instructions=False)
     assert result == ""
+
+
+def test_optional_fields():
+    """Test prompt generation for a model with optional fields."""
+    class ModelWithOptional(BaseModel):
+        required_field: str = Field(..., description="A required field")
+        optional_field: str | None = Field(None, description="An optional field")
+
+    result = generate_prompt_template(ModelWithOptional, include_instructions=False)
+    print(result)
+    print("---")
+    expected = (
+        "<required_field>\n[type: str]\n[required]\n[A required field]\n</required_field>\n"
+        "<optional_field>\n[type: str | NoneType]\n[optional]\n[An optional field]\n</optional_field>"
+    )
+    print(expected)
+    assert result == expected

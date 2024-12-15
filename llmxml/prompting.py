@@ -199,6 +199,8 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
 def _process_field(field_name: str, field_info) -> str:
     """Process a single field and return its XML representation."""
     type_info = _get_type_info(field_info)
+    required_info = "required" if field_info.is_required() else "optional"
+    description = field_info.description or f"Description of {field_name}"
 
     # Handle list types
     if (
@@ -207,7 +209,6 @@ def _process_field(field_name: str, field_info) -> str:
     ):
         # Get the type of items in the list
         item_type = get_args(field_info.annotation)[0]
-        description = field_info.description or f"Description of {field_name}"
 
         # If the list contains Pydantic models, show the structure of a single item
         if isinstance(item_type, type) and issubclass(item_type, BaseModel):
@@ -217,7 +218,7 @@ def _process_field(field_name: str, field_info) -> str:
                 _process_field(name, info) for name, info in nested_fields.items()
             ]
             return (
-                f"<{field_name}>\n[{type_info}]\n[{description}]\n"
+                f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n"
                 f"<{item_name}>\n" + "\n".join(nested_prompts) + f"\n</{item_name}>\n"
                 f"</{field_name}>"
             )
@@ -231,19 +232,17 @@ def _process_field(field_name: str, field_info) -> str:
     if isinstance(field_info.annotation, type) and issubclass(
         field_info.annotation, BaseModel
     ):
-        description = field_info.description or f"Description of {field_name}"
         nested_fields = field_info.annotation.model_fields
         nested_prompts = [
             _process_field(name, info) for name, info in nested_fields.items()
         ]
         return (
-            f"<{field_name}>\n[{type_info}]\n[{description}]\n"
+            f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n"
             + "\n".join(nested_prompts)
             + f"\n</{field_name}>"
         )
 
-    description = field_info.description or f"Description of {field_name}"
-    return f"<{field_name}>\n[{type_info}]\n[{description}]\n</{field_name}>"
+    return f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n</{field_name}>"
 
 
 def generate_prompt_template(
