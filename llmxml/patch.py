@@ -63,9 +63,10 @@ class BasePatchedClient:
     Provides common logic for inserting prompts and parsing responses.
     """
 
-    def __init__(self, client: Any, mode: Mode):
+    def __init__(self, client: Any, mode: Mode, custom_prompt: str | None = None):
         self.client = client
         self.mode = mode
+        self.custom_prompt = custom_prompt
         self._orig_method = None
         self._patch_client()
 
@@ -103,7 +104,7 @@ class BasePatchedClient:
 
     def _insert_prompt(self, response_model: Type[T], kwargs: dict) -> None:
         """Insert a user prompt for the given response_model."""
-        prompt = generate_prompt_template(response_model)
+        prompt = self.custom_prompt if self.custom_prompt is not None else generate_prompt_template(response_model)
         if "messages" in kwargs and isinstance(kwargs["messages"], list):
             kwargs["messages"].insert(0, {"role": "user", "content": prompt})
 
@@ -166,16 +167,16 @@ class AsyncPatchedClient(BasePatchedClient):
         return response
 
 
-def from_openai(client: Any) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+def from_openai(client: Any, custom_prompt: str | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     # Detect if async or sync based on the create method
     dummy = client.chat.completions.create
     is_async = is_async_function(dummy)
     if is_async:
-        return AsyncPatchedClient(client, Mode.OPENAI)
-    return SyncPatchedClient(client, Mode.OPENAI)
+        return AsyncPatchedClient(client, Mode.OPENAI, custom_prompt=custom_prompt)
+    return SyncPatchedClient(client, Mode.OPENAI, custom_prompt=custom_prompt)
 
 
-def from_anthropic(client: Any) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+def from_anthropic(client: Any, custom_prompt: str | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     # Detect async or sync based on messages.create
     create_func = None
     if hasattr(client, "messages") and hasattr(client.messages, "create"):
@@ -187,17 +188,16 @@ def from_anthropic(client: Any) -> Union[SyncPatchedClient, AsyncPatchedClient]:
         raise AttributeError("Anthropic client does not have messages.create")
 
     if is_async_function(create_func):
-        return AsyncPatchedClient(client, Mode.ANTHROPIC)
-    return SyncPatchedClient(client, Mode.ANTHROPIC)
+        return AsyncPatchedClient(client, Mode.ANTHROPIC, custom_prompt=custom_prompt)
+    return SyncPatchedClient(client, Mode.ANTHROPIC, custom_prompt=custom_prompt)
 
-def from_gemini(client: Any) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+def from_gemini(client: Any, custom_prompt: str | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     # TODO: fix. rn just use the gemini api through the openai client. look at the docs for more.
-    # Detect async or sync for Gemini
     if hasattr(client, "generate_content_async") and is_async_function(client.generate_content_async):
-        return AsyncPatchedClient(client, Mode.GEMINI)
+        return AsyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)
     elif hasattr(client, "generate_content") and is_async_function(client.generate_content):
-        return AsyncPatchedClient(client, Mode.GEMINI)
+        return AsyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)
     elif hasattr(client, "generate_content"):
-        return SyncPatchedClient(client, Mode.GEMINI)
+        return SyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)
     else:
         raise AttributeError("Gemini client does not have a suitable generation method")
