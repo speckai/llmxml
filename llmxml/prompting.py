@@ -3,6 +3,7 @@ from typing import List, Literal, Type, Union, get_args
 
 from pydantic import BaseModel, Field
 
+
 def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
     return (
         """
@@ -10,10 +11,11 @@ You are to provide your output in the following xml-like format EXACTLY as descr
 Each field in the schema has a description and a type enclosed in square brackets, denoting that they are metadata.
 Format instructions:
 <field_name>
-[type: object_type]
+[object_type]
 [required/optional]
 [description]
 </field_name>
+
 Basic example:
 <EXAMPLE>
 <EXAMPLE_SCHEMA>
@@ -36,7 +38,9 @@ Basic example:
 [The command to run]
 </command>
 </command_action>
+
 OR
+
 # Option 2: CreateAction
 <create_action>
 <action_type>
@@ -55,7 +59,9 @@ OR
 [The contents of the new file to create]
 </file_contents>
 </create_action>
+
 OR
+
 # Option 3: EditAction
 <edit_action>
 <action_type>
@@ -76,6 +82,7 @@ OR
 </edit_action>
 </actions>
 </EXAMPLE_SCHEMA>
+
 <EXAMPLE_OUTPUT>
 <thinking>
 First, I need to create a new configuration file. Then, I'll modify an existing source file to use the new configuration.
@@ -105,8 +112,7 @@ def load_config():
 def main():
     config = load_config()
     print(f"Connecting to {config['base_url']}...")
-
-if __name__ == '__main__':
+if **name** == '__main__':
     main()</new_file_contents>
 </edit_action>
 </actions>
@@ -120,6 +126,8 @@ Requested Response Schema:
 Make sure to return an instance of the output, NOT the schema itself. Do NOT include any schema metadata (like [type: ...]) in your output.
 """.strip()
     )
+
+
 def _get_type_info(field_info) -> str:
     """Extract and format the type information from a field."""
     if (
