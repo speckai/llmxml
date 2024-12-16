@@ -41,7 +41,6 @@ Basic example:
 
 OR
 
-<action>
 # Option 2: CreateAction
 <create_action>
 <action_type>
