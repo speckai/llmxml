@@ -321,12 +321,18 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
                     + f"\n</{model_name}>"
                     + "\n"
                 )
-        description = field_info.description or f"Description of {field_name}"
-        return (
-            f"<{field_name}>\n[{type_info}]\n[{description}]"
-            + "\nOR\n".join(subtype_fields)
-            + f"\n</{field_name}>"
-        )
+        if field_info.description:
+            return (
+                f"<{field_name}>\n[{type_info}]\n[{field_info.description}]"
+                + "\nOR\n".join(subtype_fields)
+                + f"\n</{field_name}>"
+            )
+        else:
+            return (
+                f"<{field_name}>\n[{type_info}]"
+                + "\nOR\n".join(subtype_fields)
+                + f"\n</{field_name}>"
+            )
     return ""
 
 
