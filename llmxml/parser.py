@@ -45,7 +45,9 @@ class XMLSafeString(str):
 
 
 def _clean_xml(xml_content: str) -> str:
-    """Clean and complete partial XML."""
+    """
+    Cleans VALID XML by wrapping code fields in <![CDATA[...]]>
+    """
     xml_content = re.sub(r"^[^<]*", "", xml_content)
     xml_content = re.sub(r"[^>]*$", "", xml_content)
 
@@ -410,6 +412,39 @@ def _extract_partial_content(
     return result
 
 
+def _fill_model_defaults(model: Type[BaseModel], data: dict) -> dict:
+    """Fill in missing data with default values from model fields."""
+    filled_data = data.copy()
+    
+    for field, field_info in model.model_fields.items():
+        if field not in filled_data:
+            if field_info.annotation is str:
+                filled_data[field] = ""
+            elif field_info.annotation is list or (
+                hasattr(field_info.annotation, "__origin__")
+                and field_info.annotation.__origin__ is list
+            ):
+                filled_data[field] = []
+            elif field_info.annotation is dict:
+                filled_data[field] = {}
+            elif field_info.annotation is int:
+                filled_data[field] = 0
+            elif field_info.annotation is float:
+                filled_data[field] = 0.0
+            elif field_info.annotation is bool:
+                filled_data[field] = False
+            elif hasattr(field_info.annotation, "model_fields"):
+                # Recursively fill defaults for nested models
+                filled_data[field] = _fill_model_defaults(field_info.annotation, {})
+            else:
+                filled_data[field] = None
+        elif hasattr(field_info.annotation, "model_fields") and isinstance(filled_data[field], dict):
+            # If the field exists but is a nested model, recursively fill its defaults
+            filled_data[field] = _fill_model_defaults(field_info.annotation, filled_data[field])
+            
+    return filled_data
+
+
 def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]:
     """Create a partial model with all fields optional."""
     if model.__name__.startswith("Partial"):
@@ -420,6 +455,7 @@ def _create_partial_model(model: Type[BaseModel], data: dict) -> Type[BaseModel]
 
     fields: dict = {}
     for field, field_info in model.model_fields.items():
+        print(f"{field=} {field_info.annotation=}")
         if field_info.annotation is str:
             default = ""
         elif field_info.annotation is list or (
@@ -464,17 +500,26 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
     except ET.ParseError:
         data = _extract_partial_content(xml_str, model)
 
+    print(data)
+    print("----")
     processed_data: dict = _process_dict_for_model(data, model)
-    # print(processed_data)
+    print(f"{processed_data=}")
+    print("----")
+
 
     if not processed_data:
         return _create_partial_model(model, {})()
+    
+    processed_data = _fill_model_defaults(model, processed_data)
 
     try:
         return model(**processed_data)
     except Exception as _e:
+        print(_e)
+        print("----")
         empty_processed_data: dict = {}
-        for field_name, field_info in model.model_fields.items():
+        for field_name, field_info in model.model_fields.   items():
+            print(f"{field_name=} {field_info=}")
             if hasattr(field_info.annotation, "model_fields"):
                 nested_partial = _create_partial_model(field_info.annotation, {})
                 empty_processed_data[field_name] = nested_partial()
@@ -485,6 +530,7 @@ def parse_xml(model: Type[T], xml_str: str) -> T:
                 empty_processed_data[field_name] = []
             else:
                 empty_processed_data[field_name] = None
+        print("----")
 
         partial_model = _create_partial_model(model, empty_processed_data)
         instance = partial_model()

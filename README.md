@@ -81,6 +81,12 @@ Schema:
 </response_instructions>
 ```
 
+## Development
+### Running tests
+```
+$ uv run -m pytest -n auto tests/test_parser.py
+```
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
