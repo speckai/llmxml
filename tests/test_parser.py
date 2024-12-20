@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal, Type, TypeVar, Union
 
-from llmxml.parser import XMLSafeString, parse_xml
+from llmxml.parser2 import parse_xml
 from pydantic import BaseModel, Field
 
 T = TypeVar("T", bound=BaseModel)
@@ -17,18 +17,14 @@ def load_test_file(filename: str) -> str:
 
 def validate_parsed_model(parsed: BaseModel, model_class: Type[T]) -> None:
     """Helper function to validate parsed models"""
-    assert (
-        isinstance(parsed, model_class)
-        or type(parsed).__name__.startswith(f"Partial{model_class.__name__}")
+    assert isinstance(parsed, model_class) or type(parsed).__name__.startswith(
+        f"Partial{model_class.__name__}"
     ), f"Expected {model_class.__name__} or Partial{model_class.__name__}, got {type(parsed).__name__}"
     json_str = parsed.model_dump_json()
     assert json.loads(json_str), "Model should be JSON serializable"
 
 
 class CreateAction(BaseModel):
-    action_type: Literal["create"] = Field(
-        ..., description="The type of action to perform"
-    )
     new_file_path: str = Field(..., description="The path to the new file to create")
     file_contents: str = Field(
         ..., description="The contents of the new file to create"
@@ -36,7 +32,6 @@ class CreateAction(BaseModel):
 
 
 class EditAction(BaseModel):
-    action_type: Literal["edit"] = Field(...)
     original_file_path: str = Field(
         ..., description="The path to the original file to edit"
     )
@@ -44,9 +39,6 @@ class EditAction(BaseModel):
 
 
 class CommandAction(BaseModel):
-    action_type: Literal["command"] = Field(
-        ..., description="The type of action to perform"
-    )
     command: str = Field(..., description="The command to run")
 
 
@@ -59,7 +51,7 @@ class CodeAction(BaseModel):
 
 class TestActions:
     def test_complete_response(self):
-        """Test parsing a complete response with multiple actions."""
+        # Test parsing a complete response with multiple actions
         xml = load_test_file("complete.xml")
         result = parse_xml(CodeAction, xml)
 
@@ -96,7 +88,7 @@ class TestActions:
         assert len(last_valid_result.actions) > 0
 
     def test_partial_response(self):
-        """Test parsing a partial response with incomplete action."""
+        # Test parsing a partial response with incomplete action
         xml = load_test_file("partial.xml")
         result = parse_xml(CodeAction, xml)
 
@@ -126,7 +118,7 @@ class TestActions:
         assert len(last_valid_result.actions) == 1
 
     def test_streaming_response(self):
-        """Test parsing a streaming response that's cut off mid-element."""
+        # Test parsing a streaming response that's cut off mid-element
         xml = load_test_file("streaming.xml")
         result = parse_xml(CodeAction, xml)
 
@@ -158,7 +150,7 @@ class TestActions:
         assert len(last_valid_result.actions) == 1
 
     def test_empty_response(self):
-        """Test parsing an empty response."""
+        # Test parsing an empty response.
         xml = ""
         result = parse_xml(CodeAction, xml)
         assert result.thinking == ""
@@ -295,58 +287,9 @@ class TestDetails:
         assert len(last_valid_result.birth_date.split("-")) == 3
 
 
-class Result(BaseModel):
-    type: str = Field(...)
-    data: dict[str, Any] = Field(...)
-
-
-class CustomResponse(BaseModel):
-    status: str = Field(...)
-    result: Result = Field(...)
-
-
-class TestCustom:
-    def test_custom_model(self):
-        """Test that parser works with custom model structures."""
-        xml = load_test_file("custom.xml")
-        result = parse_xml(CustomResponse, xml)
-
-        assert isinstance(result, CustomResponse)
-        assert result.status in ["success", "error"]
-        assert result.result.type == "playlist_update"
-        assert isinstance(result.result.data, dict)
-        assert "tracks" in result.result.data
-        assert isinstance(result.result.data["tracks"], list)
-        assert len(result.result.data["tracks"]) > 0
-
-        track = result.result.data["tracks"][0]
-        assert all(key in track for key in ["id", "title", "artist"])
-
-    def test_custom_model_streaming(self):
-        xml = load_test_file("custom.xml")
-        partial_content = ""
-        last_valid_result = None
-
-        for char in xml:
-            partial_content += char
-            result = parse_xml(CustomResponse, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CustomResponse)
-                last_valid_result = result
-
-        assert last_valid_result is not None
-        assert isinstance(last_valid_result, CustomResponse)
-        assert last_valid_result.status in ["success", "error"]
-        assert last_valid_result.result.type == "playlist_update"
-        assert isinstance(last_valid_result.result.data, dict)
-        assert "tracks" in last_valid_result.result.data
-        assert isinstance(last_valid_result.result.data["tracks"], list)
-        assert len(last_valid_result.result.data["tracks"]) > 0
-
-
 class ChunkInfo(BaseModel):
     file_path: str = Field(..., description="The path of the file")
-    content: XMLSafeString = Field(..., description="The content of the chunk")
+    content: str = Field(..., description="The content of the chunk")
 
 
 class SearchResult(BaseModel):

@@ -13,8 +13,7 @@ Let me implement the playlist grid component:
 </thinking>
 
 <actions>
-<action>
-<action_type>create</action_type>
+<create_action>
 <new_file_path>components/PlaylistGrid.tsx</new_file_path>
 <file_contents>
 import { Play } from 'lucide-react'
