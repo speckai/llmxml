@@ -45,6 +45,7 @@ class XMLSafeString(str):
 
 
 def _clean_xml(xml_content: str) -> str:
+    """Clean and complete partial XML."""
     xml_content = re.sub(r"^[^<]*", "", xml_content)
     xml_content = re.sub(r"[^>]*$", "", xml_content)
 
