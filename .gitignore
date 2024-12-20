@@ -169,6 +169,3 @@ temp*.json
 
 # VSCode
 .vscode
-
-# UV
-uv.lock
