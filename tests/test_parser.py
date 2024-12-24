@@ -87,7 +87,6 @@ class TestFileAction:
     def test_enum_nested(self):
         xml = load_test_file("enum_nested.xml")
         result: EnumSearchResponse = parse_xml(EnumSearchResponse, xml)
-        # print(result)
         assert result.search_results[0].search_result_type == SearchResultType.IMAGE
         assert result.search_results[1].search_result_type == SearchResultType.VIDEO
 
@@ -170,12 +169,7 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            # print(partial_content)
             result = parse_xml(CodeAction, partial_content)
-
-            # time.sleep(0.01)
-            console.clear()
-            console.print(result.model_dump_json(indent=4))
             if result is not None:
                 validate_parsed_model(result, CodeAction)
                 last_valid_result = result

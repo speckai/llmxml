@@ -12,6 +12,8 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def camel_to_snake(string: str) -> str:
     """
     Convert a camelCase string to a snake_case string.
+    :param string: The string to convert
+    :return: The converted string
     """
     return re.sub("(?!^)([A-Z]+)", r"_\1", string).lower()
 
@@ -74,16 +76,42 @@ def inspect_type_annotation(annotation, name: str = "") -> dict:
     }
 
 
-def _clean_xml(xml_content: str) -> str:
+def _get_all_possible_tags(type_dict: dict) -> set[str]:
+    """
+    Recursively get all possible tag names from a type dictionary.
+    :param type_dict: The type dictionary to extract tags from
+    :return: A set of all possible tag names
+    """
+    tags = set()
+    if "name" in type_dict and type_dict["name"]:
+        tags.add(type_dict["name"])
+
+    for arg in type_dict.get("args", []):
+        tags.update(_get_all_possible_tags(arg))
+
+    return tags
+
+
+def _clean_xml(xml_content: str, type_dict: dict) -> str:
     """
     Clean the XML content by:
     1. Removing content before first < and after last >
-    2. Closing any unclosed tags
+    2. Closing any unclosed tags that are present in the model
     """
+    # Get all valid tags from the model
+    valid_tags: set[str] = _get_all_possible_tags(type_dict)
 
-    # Find all opening and closing tags
-    opening_tags = re.findall(r"<([^/][^>]*)>", xml_content)
-    closing_tags = re.findall(r"</([^>]*)>", xml_content)
+    opening_tags: list[str] = []
+    for match in re.finditer(r"<([^/][^>]*)>", xml_content):
+        tag = match.group(1)
+        if tag in valid_tags:
+            opening_tags.append(tag)
+
+    closing_tags: list[str] = []
+    for match in re.finditer(r"</([^>]*)>", xml_content):
+        tag = match.group(1)
+        if tag in valid_tags:
+            closing_tags.append(tag)
 
     # Add missing closing tags in reverse order
     for tag in reversed(opening_tags):
@@ -94,14 +122,22 @@ def _clean_xml(xml_content: str) -> str:
 
 
 def _clean_xml_fallback(xml_content: str) -> str:
-    """Clean the XML content by removing the leading and trailing tags."""
+    """
+    Clean the XML content by removing the leading and trailing tags.
+    :param xml_content: The XML content to clean
+    :return: The cleaned XML content
+    """
     xml_content: str = re.sub(r"^[^<]*", "", xml_content)
     xml_content: str = re.sub(r"[^>]*$", "", xml_content)
     return xml_content
 
 
 def _is_list_type(t: type) -> bool:
-    """Check if the type is a list."""
+    """
+    Check if the type is a list.
+    :param t: The type to check
+    :return: True if the type is a list, False otherwise
+    """
     if t is list:
         return True
 
@@ -110,14 +146,25 @@ def _is_list_type(t: type) -> bool:
 
 
 def _is_pydantic_model(t) -> bool:
+    """
+    Check if the type is a pydantic model.
+    :param t: The type to check
+    :return: True if the type is a pydantic model, False otherwise
+    """
     return isinstance(t, type) and issubclass(t, BaseModel)
 
 
 def _is_field_optional(type_dict: dict, field: str) -> bool:
-    args = type_dict.get("args", [])
+    """
+    Check if the field is optional.
+    :param type_dict: The type dictionary
+    :param field: The field to check
+    :return: True if the field is optional, False otherwise
+    """
+    args: list = type_dict.get("args", [])
     for arg in args:
         if "name" not in arg:
-            union_args = arg.get("args", [])
+            union_args: list = arg.get("args", [])
             if union_args[0]["name"] != field:
                 continue
 
@@ -127,6 +174,13 @@ def _is_field_optional(type_dict: dict, field: str) -> bool:
 
 
 def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> dict:
+    """
+    Get the possible opening tags for a given type dictionary.
+    :param type_dict: The type dictionary
+    :param seen_tags: The set of tags already seen
+    :return: The possible opening tags
+    """
+
     def field_names_at_level(args: list) -> dict:
         return {
             arg["name"]: arg
@@ -134,10 +188,10 @@ def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> 
             if "name" in arg and arg["origin"] is not NoneType
         }
 
-    args = type_dict.get("args", [])
+    args: list = type_dict.get("args", [])
 
-    first_level = field_names_at_level(args)
-    second_level = {}
+    first_level: dict = field_names_at_level(args)
+    second_level: dict = {}
     for arg in args:
         if "name" not in arg:
             second_level |= field_names_at_level(arg.get("args", []))
@@ -147,6 +201,11 @@ def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> 
 
 
 def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
+    """
+    Get the default value for a primitive type.
+    :param arg: The argument dictionary
+    :return: The default value
+    """
     if arg["origin"] is str:
         return ""
     elif arg["origin"] is int:
@@ -158,17 +217,16 @@ def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
     return None
 
 
-"""
-Returns
-    - Constructed instance of type, filled with default fields if dict + necessary
-    - New position of xml parser
-    - IsContent - Whether there is any content or is it all default
-"""
-
-
 def _recurse(
     xml_content: str, open_arg: dict, pos: int
 ) -> tuple[Union[dict, list], int, bool]:
+    """
+    Recursively parse the XML content.
+    :param xml_content: The XML content to parse
+    :param open_arg: The current opening tag
+    :param pos: The current position in the XML content
+    :return: A tuple containing the parsed result, the new position, and a boolean indicating if there is content
+    """
     possible_next_opening_tags: dict = _get_possible_opening_tags(
         open_arg, {open_arg.get("name", "")}
     )
@@ -220,7 +278,7 @@ def _recurse(
             opening_tag_idx: int = xml_content.rfind(
                 opening_tag_string, 0, len(xml_content)
             )
-            content: str = xml_content[opening_tag_idx + len(open_tag_string) :]
+            content: str = xml_content[opening_tag_idx + len(opening_tag_string) :]
             return content, len(xml_content), True
 
         if opening_match and (
@@ -289,6 +347,12 @@ def _recurse(
 
 
 def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
+    """
+    Fill the parsed dictionary with empty values for fields that are not present in the XML.
+    :param parsed_dict: The parsed dictionary
+    :param type_dict: The type dictionary
+    :return: The filled dictionary
+    """
     for unseen_tag, arg in _get_possible_opening_tags(
         type_dict, set(parsed_dict.keys())
     ).items():
@@ -310,13 +374,20 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
 
 
 def _parse_xml(
-    model: Type[ModelType], xml_content: str, fallback: bool = False
+    model: Type[ModelType], xml_content: str, type_dict: dict, fallback: bool = False
 ) -> ModelType:
+    """
+    Parse the XML content into a Pydantic model.
+    :param model: The Pydantic model to parse
+    :param xml_content: The XML content to parse
+    :param type_dict: The type dictionary from inspect_type_annotation
+    :param fallback: Whether to use the fallback cleaner
+    :return: The parsed Pydantic model
+    """
     if fallback:
         xml_content: str = _clean_xml_fallback(xml_content)
     else:
-        xml_content: str = _clean_xml(xml_content)
-    type_dict: dict = inspect_type_annotation(model)
+        xml_content: str = _clean_xml(xml_content, type_dict)
 
     parsed_dict: dict
     parsed_dict, _, _ = _recurse(xml_content, type_dict, 0)
@@ -328,10 +399,17 @@ def _parse_xml(
 
 
 def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
+    """
+    Parse the XML content into a Pydantic model.
+    :param model: The Pydantic model to parse
+    :param xml_content: The XML content to parse
+    :return: The parsed Pydantic model
+    """
+    type_dict = inspect_type_annotation(model)
     try:
-        return _parse_xml(model, xml_content)
+        return _parse_xml(model, xml_content, type_dict)
     except Exception:
-        return _parse_xml(model, xml_content, fallback=True)
+        return _parse_xml(model, xml_content, type_dict, fallback=True)
 
 
 def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
@@ -344,14 +422,14 @@ def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
     :return: A new instance of the model with partial fields
     """
     # Get all fields and their types from the model
-    fields = model.model_fields
+    fields: dict = model.model_fields
 
     # Prepare new field definitions
     new_fields: dict[str, tuple[Any, Any]] = {}
 
     for field_name, field in fields.items():
-        field_type = field.annotation
-        field_value = data.get(field_name)
+        field_type: type = field.annotation
+        field_value: Any = data.get(field_name)
 
         # Handle lists
         if get_origin(field_type) is list:
@@ -360,10 +438,10 @@ def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
                 continue
 
             # Get the type inside the list
-            inner_type = get_args(field_type)[0]
+            inner_type: type = get_args(field_type)[0]
             if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
                 # Make each item in the list partial
-                new_value = [
+                new_value: list = [
                     make_partial(inner_type, item) if isinstance(item, dict) else item
                     for item in field_value
                 ]
