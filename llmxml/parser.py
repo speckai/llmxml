@@ -8,16 +8,14 @@ from pydantic import BaseModel
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
-def _camel_to_snake(string: str) -> str:
+def camel_to_snake(string: str) -> str:
     """
     Convert a camelCase string to a snake_case string.
-    :param string: The string to convert.
-    :return: The converted string.
     """
     return re.sub("(?!^)([A-Z]+)", r"_\1", string).lower()
 
 
-def _inspect_type_annotation(annotation: type, name: str = "") -> dict:
+def inspect_type_annotation(annotation, name: str = "") -> dict:
     """
     Recursively inspect a type annotation to extract its components.
 
@@ -38,7 +36,7 @@ def _inspect_type_annotation(annotation: type, name: str = "") -> dict:
         return {
             "origin": origin,
             "name": name,
-            "args": [_inspect_type_annotation(arg) for arg in args],
+            "args": [inspect_type_annotation(arg) for arg in args],
         }
 
     # Mainly for Union
@@ -48,13 +46,13 @@ def _inspect_type_annotation(annotation: type, name: str = "") -> dict:
 
         return {
             "origin": origin,
-            "args": [_inspect_type_annotation(arg, name) for arg in args],
+            "args": [inspect_type_annotation(arg, name) for arg in args],
         }
 
     # For pydantic models
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         origin: type = annotation
-        name: str = _camel_to_snake(annotation.__name__)
+        name: str = camel_to_snake(annotation.__name__)
         args: list = [
             (value.annotation, field)
             for field, value in annotation.model_fields.items()
@@ -64,7 +62,7 @@ def _inspect_type_annotation(annotation: type, name: str = "") -> dict:
             "origin": origin,
             "name": name,
             "args": [
-                _inspect_type_annotation(arg, arg_name) for (arg, arg_name) in args
+                inspect_type_annotation(arg, arg_name) for (arg, arg_name) in args
             ],
         }
 
@@ -75,23 +73,35 @@ def _inspect_type_annotation(annotation: type, name: str = "") -> dict:
     }
 
 
+# def _clean_xml(xml_content: str) -> str:
+#     """
+#     Clean the XML content by:
+#     1. Removing content before first < and after last >
+#     2. Closing any unclosed tags
+#     """
+
+#     # Find all opening and closing tags
+#     opening_tags = re.findall(r"<([^/][^>]*)>", xml_content)
+#     closing_tags = re.findall(r"</([^>]*)>", xml_content)
+
+#     # Add missing closing tags in reverse order
+#     for tag in reversed(opening_tags):
+#         if tag not in closing_tags:
+#             xml_content += f"</{tag}>"
+#     print(xml_content)
+
+#     return xml_content
+
+
 def _clean_xml(xml_content: str) -> str:
-    """
-    Clean the XML content by removing the leading and trailing tags.
-    :param xml_content: The XML content to clean.
-    :return: The cleaned XML content.
-    """
+    """Clean the XML content by removing the leading and trailing tags."""
     xml_content: str = re.sub(r"^[^<]*", "", xml_content)
     xml_content: str = re.sub(r"[^>]*$", "", xml_content)
     return xml_content
 
 
 def _is_list_type(t: type) -> bool:
-    """
-    Check if the type is a list.
-    :param t: The type to check.
-    :return: True if the type is a list, False otherwise.
-    """
+    """Check if the type is a list."""
     if t is list:
         return True
 
@@ -99,22 +109,11 @@ def _is_list_type(t: type) -> bool:
     return t.__origin__ is list if isinstance(t, types.GenericAlias) else False
 
 
-def _is_pydantic_model(t: type) -> bool:
-    """
-    Check if the type is a pydantic model.
-    :param t: The type to check.
-    :return: True if the type is a pydantic model, False otherwise.
-    """
+def _is_pydantic_model(t) -> bool:
     return isinstance(t, type) and issubclass(t, BaseModel)
 
 
 def _is_field_optional(type_dict: dict, field: str) -> bool:
-    """
-    Check if the field is optional.
-    :param type_dict: The type dictionary.
-    :param field: The field to check.
-    :return: True if the field is optional, False otherwise.
-    """
     args = type_dict.get("args", [])
     for arg in args:
         if "name" not in arg:
@@ -128,13 +127,6 @@ def _is_field_optional(type_dict: dict, field: str) -> bool:
 
 
 def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> dict:
-    """
-    Get the possible opening tags for a given type.
-    :param type_dict: The type dictionary.
-    :param seen_tags: The set of tags that have already been seen.
-    :return: The possible opening tags.
-    """
-
     def field_names_at_level(args: list) -> dict:
         return {
             arg["name"]: arg
@@ -142,10 +134,10 @@ def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> 
             if "name" in arg and arg["origin"] is not NoneType
         }
 
-    args: list = type_dict.get("args", [])
+    args = type_dict.get("args", [])
 
-    first_level: dict = field_names_at_level(args)
-    second_level: dict = {}
+    first_level = field_names_at_level(args)
+    second_level = {}
     for arg in args:
         if "name" not in arg:
             second_level |= field_names_at_level(arg.get("args", []))
@@ -155,11 +147,6 @@ def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> 
 
 
 def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
-    """
-    Get the default value for a primitive type.
-    :param arg: The type dictionary.
-    :return: The default value for the primitive type.
-    """
     if arg["origin"] is str:
         return ""
     elif arg["origin"] is int:
@@ -171,16 +158,17 @@ def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
     return None
 
 
+"""
+Returns
+    - Constructed instance of type, filled with default fields if dict + necessary
+    - New position of xml parser
+    - IsContent - Whether there is any content or is it all default
+"""
+
+
 def _recurse(
     xml_content: str, open_arg: dict, pos: int
 ) -> tuple[Union[dict, list], int, bool]:
-    """
-    Recurse through the XML content to construct the model.
-    :param xml_content: The XML content to parse.
-    :param open_arg: The type dictionary.
-    :param pos: The current position in the XML content.
-    :return: A tuple containing the constructed model, the new position, and whether there is any content.
-    """
     possible_next_opening_tags: dict = _get_possible_opening_tags(
         open_arg, {open_arg.get("name", "")}
     )
@@ -255,9 +243,20 @@ def _recurse(
             pos = new_pos
         elif closing_match:
             if _is_list_type(open_arg["origin"]):
+                # For empty tags that are part of a Union type, initialize with required fields
+                if not attribute_list and any(
+                    arg.get("args", []) for arg in open_arg["args"]
+                ):
+                    # Get the first Union variant and initialize it with empty values
+                    first_variant = open_arg["args"][0]
+                    empty_dict = _fill_with_empty({}, first_variant)
+                    return [empty_dict], closing_match.end(), True
                 return attribute_list, closing_match.end(), True
 
             if _is_pydantic_model(open_arg["origin"]):
+                # For empty tags, ensure we return an empty dict that will be filled later
+                if not attribute_dict:
+                    return {}, closing_match.end(), True
                 return attribute_dict, closing_match.end(), True
 
             # Primitive
@@ -267,6 +266,11 @@ def _recurse(
             content = xml_content[
                 opening_tag_idx + len(opening_tag_string) : closing_match.start()
             ]
+            # Strip whitespace for enum types
+            if isinstance(open_arg["origin"], type) and issubclass(
+                open_arg["origin"], Enum
+            ):
+                content = content.strip()
             attribute_dict[open_arg["name"]] = content
             return content, closing_match.end(), True
 
@@ -284,16 +288,23 @@ def _recurse(
     return _get_default_for_primitive(open_arg), len(xml_content), False
 
 
+from enum import Enum
+
+
 def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
     for unseen_tag, arg in _get_possible_opening_tags(
         type_dict, set(parsed_dict.keys())
     ).items():
-        if _is_field_optional(parsed_dict, unseen_tag):
+        # print(arg, unseen_tag)
+        if _is_field_optional(type_dict, unseen_tag):
             continue
         if _is_pydantic_model(arg["origin"]):
             parsed_dict[unseen_tag] = _fill_with_empty({}, arg)
         elif _is_list_type(arg["origin"]):
             parsed_dict[unseen_tag] = []
+        # Enum Type
+        elif isinstance(arg["origin"], type) and issubclass(arg["origin"], Enum):
+            parsed_dict[unseen_tag] = next(iter(arg["origin"]))
         # Primitive Type
         elif isinstance(arg["origin"], type):
             parsed_dict[unseen_tag] = _get_default_for_primitive(arg)
@@ -302,14 +313,8 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
 
 
 def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
-    """
-    Parse the XML content into a pydantic model.
-    :param model: The pydantic model to parse the XML content into.
-    :param xml_content: The XML content to parse.
-    :return: The parsed pydantic model.
-    """
     xml_content: str = _clean_xml(xml_content)
-    type_dict: dict = _inspect_type_annotation(model)
+    type_dict: dict = inspect_type_annotation(model)
 
     parsed_dict: dict
     parsed_dict, _, _ = _recurse(xml_content, type_dict, 0)
