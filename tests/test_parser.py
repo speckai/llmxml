@@ -47,10 +47,19 @@ class ChunkInfo(BaseModel):
     content: str = Field(..., description="The content of the chunk")
 
 
-class SearchResultType(StrEnum):
-    BASIC_TEXT = "basic_text"
-    IMAGE = "image"
-    VIDEO = "video"
+# class SearchResultType(StrEnum):
+#     BASIC_TEXT = "basic_text"
+#     IMAGE = "image"
+#     VIDEO = "video"
+
+
+from enum import Enum
+
+
+class SearchResultType(Enum):
+    BASIC_TEXT = 1
+    IMAGE = 2
+    VIDEO = 3
 
 
 class SearchResult(BaseModel):
@@ -79,9 +88,7 @@ class TestFileAction:
         xml = load_test_file("enum_nested.xml")
         result: EnumSearchResponse = parse_xml(EnumSearchResponse, xml)
         # print(result)
-        assert (
-            result.search_results[0].search_result_type == SearchResultType.BASIC_TEXT
-        )
+        assert result.search_results[0].search_result_type == SearchResultType.IMAGE
         assert result.search_results[1].search_result_type == SearchResultType.VIDEO
 
     def test_enum_nested_streaming(self):
@@ -101,7 +108,7 @@ class TestFileAction:
         assert len(last_valid_result.search_results) == 2
         assert (
             last_valid_result.search_results[0].search_result_type
-            == SearchResultType.BASIC_TEXT
+            == SearchResultType.IMAGE
         )
         assert (
             last_valid_result.search_results[1].search_result_type

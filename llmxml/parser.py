@@ -1,5 +1,6 @@
 import re
 import types
+from enum import Enum
 from types import NoneType
 from typing import Any, Type, TypeVar, Union, get_args, get_origin
 
@@ -178,6 +179,7 @@ def _recurse(
 
     if _is_list_type(open_arg["origin"]):
         attribute_dict[open_arg["name"]] = []
+
     while pos < len(xml_content):
         open_tag_pattern: str = "|".join(possible_next_opening_tags.keys())
         opening_tag_regex: re.Pattern = re.compile(f"<({open_tag_pattern})>")
@@ -213,23 +215,19 @@ def _recurse(
                     False,
                 )
 
-            # Primitive
+            # Primitive (final fallback)
             opening_tag_string: str = f"<{open_arg['name']}>"
             opening_tag_idx: int = xml_content.rfind(
                 opening_tag_string, 0, len(xml_content)
             )
-
-            content: str = xml_content[opening_tag_idx + len(opening_tag_string) :]
+            content: str = xml_content[opening_tag_idx + len(open_tag_string) :]
             return content, len(xml_content), True
+
         if opening_match and (
             not closing_match or opening_match.start() < closing_match.start()
         ):
-            # We should recurse on the lower text, with the current open_arg passed in
+            # Recurse into child tag
             new_open_arg: dict = possible_next_opening_tags[opening_match.group(1)]
-
-            dict_entry: Union[dict, list, str, int, float, bool, None]
-            new_pos: int
-            is_content: bool
             dict_entry, new_pos, is_content = _recurse(
                 xml_content, new_open_arg, opening_match.end()
             )
@@ -238,40 +236,43 @@ def _recurse(
             if _is_list_type(open_arg["origin"]) and is_content:
                 attribute_list.append(dict_entry)
             elif dict_entry:
-                attribute_dict[new_open_arg["name"]] = dict_entry  # TODO might be fishy
+                attribute_dict[new_open_arg["name"]] = dict_entry
+
             pos = new_pos
+
         elif closing_match:
             if _is_list_type(open_arg["origin"]):
-                # For empty tags that are part of a Union type, initialize with required fields
                 if not attribute_list and any(
                     arg.get("args", []) for arg in open_arg["args"]
                 ):
-                    # Get the first Union variant and initialize it with empty values
                     first_variant = open_arg["args"][0]
                     empty_dict = _fill_with_empty({}, first_variant)
                     return [empty_dict], closing_match.end(), True
                 return attribute_list, closing_match.end(), True
 
             if _is_pydantic_model(open_arg["origin"]):
-                # For empty tags, ensure we return an empty dict that will be filled later
                 if not attribute_dict:
                     return {}, closing_match.end(), True
                 return attribute_dict, closing_match.end(), True
 
-            # Primitive
+            # Primitive or Enum
             opening_tag_string = f"<{open_arg['name']}>"
             opening_tag_idx = xml_content.rfind(opening_tag_string, 0, pos)
-
             content = xml_content[
                 opening_tag_idx + len(opening_tag_string) : closing_match.start()
             ]
-            # Strip whitespace for enum types
+
+            # If this is an Enum, perform special handling to map numeric or string.
             if isinstance(open_arg["origin"], type) and issubclass(
                 open_arg["origin"], Enum
             ):
                 content = content.strip()
-            attribute_dict[open_arg["name"]] = content
-            return content, closing_match.end(), True
+                enum_value = _convert_enum_content(open_arg["origin"], content)
+                attribute_dict[open_arg["name"]] = enum_value
+                return enum_value, closing_match.end(), True
+            else:
+                attribute_dict[open_arg["name"]] = content
+                return content, closing_match.end(), True
 
     if _is_list_type(open_arg["origin"]):
         return attribute_list, len(xml_content), has_child_content
@@ -283,11 +284,8 @@ def _recurse(
             has_child_content,
         )
 
-    # Primitive
+    # Primitive fallback
     return _get_default_for_primitive(open_arg), len(xml_content), False
-
-
-from enum import Enum
 
 
 def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
@@ -417,3 +415,25 @@ def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
 
     # Create an instance with the provided data
     return partial_model(**{k: v for k, (_, v) in new_fields.items() if v is not None})
+
+
+def _convert_enum_content(enum_type: type[Enum], content: str) -> Enum | str | None:
+    """
+    Converts XML content to the correct Enum member if possible.
+    - If 'content' is purely digits, interpret "1" => the first enum member, "2" => second, etc.
+    - Otherwise, pass the raw string along, which might match the enum's string value or raise error.
+    """
+    content = content.strip()
+    if content.isdigit():
+        # Attempt 1-based indexing into the enum members
+        try:
+            idx = int(content) - 1
+            members = list(enum_type)
+            return members[idx]  # Return the actual Enum member
+        except (IndexError, ValueError):
+            # If out of range or invalid integer, default to None (pydantic may raise validation error if required)
+            return None
+    else:
+        # Just return the stripped string.
+        # If it matches an Enum's string value or name, pydantic can parse it.
+        return content

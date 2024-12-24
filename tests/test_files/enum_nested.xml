@@ -20,7 +20,7 @@ Here are the search results:
     0.4074956178665161
     </vector_similarity_score>
     <search_result_type>
-    basic_text
+    2
     </search_result_type>
 </search_result>
 <search_result>
@@ -39,7 +39,7 @@ Here are the search results:
     0.39815372228622437
     </vector_similarity_score>
     <search_result_type>
-    video
+    3
     </search_result_type>
 </search_result>
 
