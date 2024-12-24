@@ -1,12 +1,9 @@
-import json
 import re
-from types import UnionType, NoneType
-from typing import Any, Type, TypeVar, Union, get_args, get_origin
 import types
-from xml.etree import ElementTree as ET
+from types import NoneType
+from typing import Type, TypeVar, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, GetJsonSchemaHandler, create_model
-from pydantic_core import CoreSchema, core_schema
+from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -95,12 +92,13 @@ def _is_list_type(t) -> bool:
     # Check if it's a raw list
     if t is list:
         return True
-    
+
     # Check if it's a generic list type
     if isinstance(t, types.GenericAlias):
         return t.__origin__ is list
-    
+
     return False
+
 
 def _is_pydantic_model(t) -> bool:
     return isinstance(t, type) and issubclass(t, BaseModel)
@@ -113,7 +111,7 @@ def _is_field_optional(type_dict: dict, field: str) -> bool:
             union_args = arg.get("args", [])
             if union_args[0]["name"] != field:
                 continue
-            
+
             return any(union_arg["origin"] is NoneType for union_arg in union_args)
 
     return False
@@ -121,7 +119,11 @@ def _is_field_optional(type_dict: dict, field: str) -> bool:
 
 def _get_possible_opening_tags(type_dict: dict, seen_tags: set[str] = set()) -> dict:
     def field_names_at_level(args: list) -> dict:
-        return {arg["name"]: arg for arg in args if "name" in arg and arg["origin"] is not NoneType}
+        return {
+            arg["name"]: arg
+            for arg in args
+            if "name" in arg and arg["origin"] is not NoneType
+        }
 
     args = type_dict.get("args", [])
 
@@ -147,29 +149,36 @@ def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
     print(f"ALERT RETURNING NONE {arg["origin"]=}")
     return None
 
+
 """
 Returns
     - Constructed instance of type, filled with default fields if dict + necessary
     - New position of xml parser
     - IsContent - Whether there is any content or is it all default
 """
-def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, list], int, bool]:
-    # print(f"----\n{open_arg=} \n{pos=}")
-    possible_next_opening_tags = _get_possible_opening_tags(open_arg, set([open_arg.get("name", "")]))
 
-    attribute_dict: dict = {} # lists only
+
+def _recurse(
+    xml_content: str, open_arg: dict, pos: int
+) -> tuple[Union[dict, list], int, bool]:
+    # print(f"----\n{open_arg=} \n{pos=}")
+    possible_next_opening_tags = _get_possible_opening_tags(
+        open_arg, set([open_arg.get("name", "")])
+    )
+
+    attribute_dict: dict = {}  # lists only
     attribute_list: list = []
     has_child_content = False
-    
+
     if _is_list_type(open_arg["origin"]):
         attribute_dict[open_arg["name"]] = []
     while pos < len(xml_content):
-        open_tag_pattern = '|'.join(possible_next_opening_tags.keys())
+        open_tag_pattern = "|".join(possible_next_opening_tags.keys())
         opening_tag_regex = re.compile(f"<({open_tag_pattern})>")
         opening_match = opening_tag_regex.search(xml_content, pos)
         if len(possible_next_opening_tags) == 0:
             opening_match = None
-        
+
         close_tag_regex = re.compile(f"</({open_arg["name"]})>")
         closing_match = close_tag_regex.search(xml_content, pos)
 
@@ -177,16 +186,30 @@ def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, li
             if _is_list_type(open_arg["origin"]):
                 if len(attribute_list) == 0:
                     return [], len(xml_content), False
-                return attribute_list[:-1] + [_fill_with_empty(attribute_list[-1], possible_next_opening_tags[open_arg["name"]])], len(xml_content), False
+                return (
+                    attribute_list[:-1]
+                    + [
+                        _fill_with_empty(
+                            attribute_list[-1],
+                            possible_next_opening_tags[open_arg["name"]],
+                        )
+                    ],
+                    len(xml_content),
+                    False,
+                )
 
             if _is_pydantic_model(open_arg["origin"]):
-                return _fill_with_empty(attribute_dict, open_arg), len(xml_content), False
-            
+                return (
+                    _fill_with_empty(attribute_dict, open_arg),
+                    len(xml_content),
+                    False,
+                )
+
             # Primitive
             opening_tag_string = f"<{open_arg['name']}>"
             opening_tag_idx = xml_content.rfind(opening_tag_string, 0, len(xml_content))
 
-            content = xml_content[opening_tag_idx + len(opening_tag_string):]
+            content = xml_content[opening_tag_idx + len(opening_tag_string) :]
             return content, len(xml_content), True
         if opening_match and (
             not closing_match or opening_match.start() < closing_match.start()
@@ -194,7 +217,9 @@ def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, li
             # We should recurse on the lower text, with the current open_arg passed in
             new_open_arg = possible_next_opening_tags[opening_match.group(1)]
 
-            dict_entry, new_pos, is_content = _recurse(xml_content, new_open_arg, opening_match.end())
+            dict_entry, new_pos, is_content = _recurse(
+                xml_content, new_open_arg, opening_match.end()
+            )
             has_child_content |= is_content
             # print(f"----\n{dict_entry=} \n{new_pos=}")
 
@@ -202,7 +227,7 @@ def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, li
                 attribute_list.append(dict_entry)
                 print(f"{open_arg["name"]} closed")
             elif dict_entry:
-                attribute_dict[new_open_arg["name"]] = dict_entry # TODO might be fishy
+                attribute_dict[new_open_arg["name"]] = dict_entry  # TODO might be fishy
                 print(f"{new_open_arg["name"]} closed")
             pos = new_pos
         elif closing_match:
@@ -211,12 +236,14 @@ def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, li
 
             if _is_pydantic_model(open_arg["origin"]):
                 return attribute_dict, closing_match.end(), True
-            
+
             # Primitive
             opening_tag_string = f"<{open_arg['name']}>"
             opening_tag_idx = xml_content.rfind(opening_tag_string, 0, pos)
 
-            content = xml_content[opening_tag_idx + len(opening_tag_string):closing_match.start()]
+            content = xml_content[
+                opening_tag_idx + len(opening_tag_string) : closing_match.start()
+            ]
             attribute_dict[open_arg["name"]] = content
             return content, closing_match.end(), True
 
@@ -224,14 +251,20 @@ def _recurse(xml_content: str, open_arg: dict, pos: int) -> tuple[Union[dict, li
         return attribute_list, len(xml_content), has_child_content
 
     if _is_pydantic_model(open_arg["origin"]):
-        return _fill_with_empty(attribute_dict, open_arg), len(xml_content), has_child_content
-    
+        return (
+            _fill_with_empty(attribute_dict, open_arg),
+            len(xml_content),
+            has_child_content,
+        )
+
     # Primitive
     return _get_default_for_primitive(open_arg), len(xml_content), False
 
 
 def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
-    for unseen_tag, arg in _get_possible_opening_tags(type_dict, set(parsed_dict.keys())).items():
+    for unseen_tag, arg in _get_possible_opening_tags(
+        type_dict, set(parsed_dict.keys())
+    ).items():
         if _is_field_optional(parsed_dict, unseen_tag):
             continue
         if _is_pydantic_model(arg["origin"]):
@@ -241,9 +274,9 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
         # Primitive Type
         elif isinstance(arg["origin"], type):
             parsed_dict[unseen_tag] = _get_default_for_primitive(arg)
-        
+
     return parsed_dict
-        
+
 
 def parse_xml(model: Type[T], xml_content: str) -> T:
     xml_content = _clean_xml(xml_content)
@@ -254,6 +287,6 @@ def parse_xml(model: Type[T], xml_content: str) -> T:
     if not parsed_dict:
         parsed_dict = {}
     parsed_dict = _fill_with_empty(parsed_dict, type_dict)
-    
+
     print(parsed_dict)
     return model(**parsed_dict)
