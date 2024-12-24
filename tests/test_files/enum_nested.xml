@@ -1,0 +1,46 @@
+<objective>
+Idk basic text I cant be asked to write
+</objective>
+
+Here are the search results:
+<search_results>
+<search_result>
+    <chunk_id>
+    chunk_1
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+        basic_text_101
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.4074956178665161
+    </vector_similarity_score>
+    <search_result_type>
+    basic_text
+    </search_result_type>
+</search_result>
+<search_result>
+    <chunk_id>
+    chunk_2
+    </chunk_id>
+    <chunk_info>
+        <file_path>
+        app/page.tsx
+        </file_path>
+        <content>
+        basic_text_102
+        </content>
+    </chunk_info>
+    <vector_similarity_score>
+    0.39815372228622437
+    </vector_similarity_score>
+    <search_result_type>
+    video
+    </search_result_type>
+</search_result>
+
+</search_results>
