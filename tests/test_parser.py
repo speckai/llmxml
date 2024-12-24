@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, Union
+from typing import Type, TypeVar, Union
 
-from llmxml.parser2 import parse_xml
 from pydantic import BaseModel, Field
+
+from llmxml import parse_xml
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -17,8 +18,9 @@ def load_test_file(filename: str) -> str:
 
 def validate_parsed_model(parsed: BaseModel, model_class: Type[T]) -> None:
     """Helper function to validate parsed models"""
-    assert isinstance(parsed, model_class) or type(parsed).__name__.startswith(
-        f"Partial{model_class.__name__}"
+    assert (
+        isinstance(parsed, model_class)
+        or type(parsed).__name__.startswith(f"Partial{model_class.__name__}")
     ), f"Expected {model_class.__name__} or Partial{model_class.__name__}, got {type(parsed).__name__}"
     json_str = parsed.model_dump_json()
     assert json.loads(json_str), "Model should be JSON serializable"
