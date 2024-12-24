@@ -1,9 +1,9 @@
 import re
 import types
 from types import NoneType
-from typing import Type, TypeVar, Union, get_args, get_origin
+from typing import Any, Type, TypeVar, Union, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
@@ -73,27 +73,26 @@ def inspect_type_annotation(annotation, name: str = "") -> dict:
     }
 
 
-# def _clean_xml(xml_content: str) -> str:
-#     """
-#     Clean the XML content by:
-#     1. Removing content before first < and after last >
-#     2. Closing any unclosed tags
-#     """
-
-#     # Find all opening and closing tags
-#     opening_tags = re.findall(r"<([^/][^>]*)>", xml_content)
-#     closing_tags = re.findall(r"</([^>]*)>", xml_content)
-
-#     # Add missing closing tags in reverse order
-#     for tag in reversed(opening_tags):
-#         if tag not in closing_tags:
-#             xml_content += f"</{tag}>"
-#     print(xml_content)
-
-#     return xml_content
-
-
 def _clean_xml(xml_content: str) -> str:
+    """
+    Clean the XML content by:
+    1. Removing content before first < and after last >
+    2. Closing any unclosed tags
+    """
+
+    # Find all opening and closing tags
+    opening_tags = re.findall(r"<([^/][^>]*)>", xml_content)
+    closing_tags = re.findall(r"</([^>]*)>", xml_content)
+
+    # Add missing closing tags in reverse order
+    for tag in reversed(opening_tags):
+        if tag not in closing_tags:
+            xml_content += f"</{tag}>"
+
+    return xml_content
+
+
+def _clean_xml_fallback(xml_content: str) -> str:
     """Clean the XML content by removing the leading and trailing tags."""
     xml_content: str = re.sub(r"^[^<]*", "", xml_content)
     xml_content: str = re.sub(r"[^>]*$", "", xml_content)
@@ -312,8 +311,13 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
     return parsed_dict
 
 
-def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
-    xml_content: str = _clean_xml(xml_content)
+def _parse_xml(
+    model: Type[ModelType], xml_content: str, fallback: bool = False
+) -> ModelType:
+    if fallback:
+        xml_content: str = _clean_xml_fallback(xml_content)
+    else:
+        xml_content: str = _clean_xml(xml_content)
     type_dict: dict = inspect_type_annotation(model)
 
     parsed_dict: dict
@@ -323,3 +327,93 @@ def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
     parsed_dict = _fill_with_empty(parsed_dict, type_dict)
 
     return model(**parsed_dict)
+
+
+def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
+    try:
+        return _parse_xml(model, xml_content)
+    except Exception:
+        return _parse_xml(model, xml_content, fallback=True)
+
+
+def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
+    """
+    Creates a partial version of a Pydantic model where missing fields become None
+    and nested models are also made partial.
+
+    :param model: The Pydantic model class to make partial
+    :param data: The data dictionary to parse
+    :return: A new instance of the model with partial fields
+    """
+    # Get all fields and their types from the model
+    fields = model.model_fields
+
+    # Prepare new field definitions
+    new_fields: dict[str, tuple[Any, Any]] = {}
+
+    for field_name, field in fields.items():
+        field_type = field.annotation
+        field_value = data.get(field_name)
+
+        # Handle lists
+        if get_origin(field_type) is list:
+            if field_value is None or field_value == []:
+                new_fields[field_name] = (list, [])
+                continue
+
+            # Get the type inside the list
+            inner_type = get_args(field_type)[0]
+            if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
+                # Make each item in the list partial
+                new_value = [
+                    make_partial(inner_type, item) if isinstance(item, dict) else item
+                    for item in field_value
+                ]
+                new_fields[field_name] = (list[inner_type], new_value)
+            else:
+                new_fields[field_name] = (list[inner_type], field_value)
+
+        # Handle nested models
+        elif isinstance(field_type, type) and issubclass(field_type, BaseModel):
+            if field_value is None:
+                new_fields[field_name] = (field_type, None)
+            else:
+                new_fields[field_name] = (
+                    field_type,
+                    make_partial(field_type, field_value),
+                )
+
+        # Handle Union types
+        elif get_origin(field_type) is Union:
+            if field_value is None:
+                new_fields[field_name] = (field_type, None)
+            else:
+                # Try to determine the correct type from the Union
+                for possible_type in get_args(field_type):
+                    if isinstance(possible_type, type) and issubclass(
+                        possible_type, BaseModel
+                    ):
+                        try:
+                            new_fields[field_name] = (
+                                field_type,
+                                make_partial(possible_type, field_value),
+                            )
+                            break
+                        except:
+                            continue
+                if field_name not in new_fields:
+                    new_fields[field_name] = (field_type, field_value)
+
+        # Handle primitive types
+        else:
+            new_fields[field_name] = (field_type, field_value)
+
+    # Create a new model with all fields optional
+    partial_model = create_model(
+        f"Partial{model.__name__}",
+        __base__=model,
+        **{name: (type_, None) for name, (type_, _) in new_fields.items()},
+    )
+
+    # Create an instance with the provided data
+    return partial_model(**{k: v for k, (_, v) in new_fields.items() if v is not None})

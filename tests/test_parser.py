@@ -1,4 +1,5 @@
 import json
+from enum import StrEnum
 from pathlib import Path
 from typing import Type, TypeVar, Union
 
@@ -7,6 +8,10 @@ from pydantic import BaseModel, Field
 from llmxml import parse_xml
 
 T = TypeVar("T", bound=BaseModel)
+
+from rich.console import Console
+
+console = Console()
 
 
 def load_test_file(filename: str) -> str:
@@ -24,6 +29,84 @@ def validate_parsed_model(parsed: BaseModel, model_class: Type[T]) -> None:
     ), f"Expected {model_class.__name__} or Partial{model_class.__name__}, got {type(parsed).__name__}"
     json_str = parsed.model_dump_json()
     assert json.loads(json_str), "Model should be JSON serializable"
+
+
+class FileOperation(StrEnum):
+    OPEN = "open"
+    EDIT = "edit"
+    CREATE = "create"
+
+
+class FileAction(BaseModel):
+    thinking: str = Field(..., description="The thinking to perform")
+    file_operation: FileOperation = Field(..., description="The operation to perform")
+
+
+class ChunkInfo(BaseModel):
+    file_path: str = Field(..., description="The path of the file")
+    content: str = Field(..., description="The content of the chunk")
+
+
+class SearchResultType(StrEnum):
+    BASIC_TEXT = "basic_text"
+    IMAGE = "image"
+    VIDEO = "video"
+
+
+class SearchResult(BaseModel):
+    chunk_id: str = Field(..., description="The id of the chunk")
+    chunk_info: ChunkInfo = Field(..., description="The info of the chunk")
+    vector_similarity_score: float = Field(
+        ..., description="The similarity score of the chunk"
+    )
+    search_result_type: SearchResultType = Field(
+        ..., description="The type of search result"
+    )
+
+
+class EnumSearchResponse(BaseModel):
+    objective: str = Field(..., description="Idk")
+    search_results: list[SearchResult] = Field(..., description="The search results")
+
+
+class TestFileAction:
+    def test_enum_basic(self):
+        xml = load_test_file("enum_basic.xml")
+        result: FileAction = parse_xml(FileAction, xml)
+        assert result.file_operation == FileOperation.OPEN
+
+    def test_enum_nested(self):
+        xml = load_test_file("enum_nested.xml")
+        result: EnumSearchResponse = parse_xml(EnumSearchResponse, xml)
+        # print(result)
+        assert (
+            result.search_results[0].search_result_type == SearchResultType.BASIC_TEXT
+        )
+        assert result.search_results[1].search_result_type == SearchResultType.VIDEO
+
+    def test_enum_nested_streaming(self):
+        xml = load_test_file("enum_nested.xml")
+        partial_content = ""
+        last_valid_result = None
+
+        for char in xml:
+            partial_content += char
+            result = parse_xml(EnumSearchResponse, partial_content)
+            if result is not None:
+                validate_parsed_model(result, EnumSearchResponse)
+                last_valid_result = result
+
+        assert last_valid_result is not None
+        assert isinstance(last_valid_result, EnumSearchResponse)
+        assert len(last_valid_result.search_results) == 2
+        assert (
+            last_valid_result.search_results[0].search_result_type
+            == SearchResultType.BASIC_TEXT
+        )
+        assert (
+            last_valid_result.search_results[1].search_result_type
+            == SearchResultType.VIDEO
+        )
 
 
 class CreateAction(BaseModel):
@@ -80,7 +163,12 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
+            # print(partial_content)
             result = parse_xml(CodeAction, partial_content)
+
+            # time.sleep(0.01)
+            console.clear()
+            console.print(result.model_dump_json(indent=4))
             if result is not None:
                 validate_parsed_model(result, CodeAction)
                 last_valid_result = result
@@ -140,6 +228,7 @@ class TestActions:
         xml = load_test_file("streaming.xml")
         partial_content = ""
         last_valid_result = None
+
         for char in xml:
             partial_content += char
             result = parse_xml(CodeAction, partial_content)
@@ -331,9 +420,8 @@ class TestSearch:
         for char in search_file:
             partial_content += char
             result = parse_xml(SearchResponse, partial_content)
-            if result is not None:
-                validate_parsed_model(result, SearchResponse)
-                last_valid_result = result
+            validate_parsed_model(result, SearchResponse)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, SearchResponse)
