@@ -13,8 +13,7 @@ Let me implement the search functionality for the Spotify clone:
 </thinking>
 
 <actions>
-<action>
-<action_type>create</action_type>
+<create_action>
 <new_file_path>components/Search.tsx</new_file_path>
 <file_contents>
 import { Search } from 'lucide-react'
@@ -48,15 +47,13 @@ export const SearchBar = () => {
   )
 }
 </file_contents>
-</action>
+</create_action>
 
-<action>
-<action_type>command</action_type>
+<command_action>
 <command>npm install lodash @types/lodash --save</command>
-</action>
+</command_action>
 
-<action>
-<action_type>edit</action_type>
+<edit_action>
 <original_file_path>app/spotify/page.tsx</original_file_path>
 <new_file_contents>
 import { SearchBar } from '@/components/Search'
@@ -74,5 +71,5 @@ const SpotifyPage = () => {
 
 export default SpotifyPage
 </new_file_contents>
-</action>
+</edit_action>
 </actions> 
