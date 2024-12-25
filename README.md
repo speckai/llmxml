@@ -1,5 +1,11 @@
 # llmxml - XML parsing for LLM outputs
 
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![PyPI package](https://badge.fury.io/py/llmxml.svg)](https://badge.fury.io/py/llmxml)
+
+**Sponsored by [Speck](https://speck.sh)**
+[![Speck](https://speck.sh/_next/image?url=%2Fspeck-icon.png&w=16&q=75)](https://speck.sh/)
+
 XML outputs are a common format for LLM outputs, but they are not always easy to parse. This package provides a way to parse XML outputs into Pydantic models.
 
 This supports nested models, lists, and unions as well as partial parsing for streamed responses. llmxml also supports generating a prompt template for the XML schema to pass to the LLM.
@@ -79,6 +85,12 @@ Schema:
 [A list of movies]
 </movies>
 </response_instructions>
+```
+
+## Development
+### Running tests
+```
+$ uv run -m pytest -n auto tests/test_parser.py
 ```
 
 ## License

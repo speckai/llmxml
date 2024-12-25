@@ -78,6 +78,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
 
 # IPython
 profile_default/
@@ -165,3 +166,7 @@ cython_debug/
 # Temp tests
 tests/test_temp*
 tests/test_files_temp*
+temp*.json
+
+# VSCode
+.vscode

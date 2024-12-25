@@ -1,11 +1,17 @@
 import json
+from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, Union
+from typing import Type, TypeVar, Union
 
-from llmxml.parser import XMLSafeString, parse_xml
 from pydantic import BaseModel, Field
+from rich.console import Console
+
+from llmxml import parse_xml
 
 T = TypeVar("T", bound=BaseModel)
+
+
+console = Console()
 
 
 def load_test_file(filename: str) -> str:
@@ -25,10 +31,117 @@ def validate_parsed_model(parsed: BaseModel, model_class: Type[T]) -> None:
     assert json.loads(json_str), "Model should be JSON serializable"
 
 
-class CreateAction(BaseModel):
-    action_type: Literal["create"] = Field(
-        ..., description="The type of action to perform"
+class FileOperation(StrEnum):
+    OPEN = "open"
+    EDIT = "edit"
+    CREATE = "create"
+
+
+class FileAction(BaseModel):
+    thinking: str = Field(..., description="The thinking to perform")
+    file_operation: FileOperation = Field(..., description="The operation to perform")
+
+
+class ChunkInfo(BaseModel):
+    file_path: str = Field(..., description="The path of the file")
+    content: str = Field(..., description="The content of the chunk")
+
+
+# class SearchResultType(StrEnum):
+#     BASIC_TEXT = "basic_text"
+#     IMAGE = "image"
+#     VIDEO = "video"
+
+
+class SearchResultType(Enum):
+    BASIC_TEXT = 1
+    IMAGE = 2
+    VIDEO = 3
+
+
+class SearchResult(BaseModel):
+    chunk_id: str = Field(..., description="The id of the chunk")
+    chunk_info: ChunkInfo = Field(..., description="The info of the chunk")
+    vector_similarity_score: float = Field(
+        ..., description="The similarity score of the chunk"
     )
+    search_result_type: SearchResultType = Field(
+        ..., description="The type of search result"
+    )
+
+
+class EnumSearchResponse(BaseModel):
+    objective: str = Field(..., description="Idk")
+    search_results: list[SearchResult] = Field(..., description="The search results")
+
+
+class TestFileAction:
+    def test_enum_basic(self):
+        xml = load_test_file("enum_basic.xml")
+        result: FileAction = parse_xml(xml, FileAction)
+        assert result.file_operation == FileOperation.OPEN
+
+    def test_enum_nested(self):
+        xml = load_test_file("enum_nested.xml")
+        result: EnumSearchResponse = parse_xml(xml, EnumSearchResponse)
+        assert result.search_results[0].search_result_type == SearchResultType.IMAGE
+        assert result.search_results[1].search_result_type == SearchResultType.VIDEO
+
+    import time
+
+    def test_enum_nested_streaming(self):
+        xml = load_test_file("enum_nested.xml")
+        partial_content = ""
+        last_valid_result = None
+
+        for char in xml:
+            partial_content += char
+            result = parse_xml(partial_content, EnumSearchResponse)
+            validate_parsed_model(result, EnumSearchResponse)
+            last_valid_result = result
+
+        assert last_valid_result is not None
+        assert isinstance(last_valid_result, EnumSearchResponse)
+        assert len(last_valid_result.search_results) == 2
+        assert (
+            last_valid_result.search_results[0].search_result_type
+            == SearchResultType.IMAGE
+        )
+        assert (
+            last_valid_result.search_results[1].search_result_type
+            == SearchResultType.VIDEO
+        )
+
+
+class BasicResponse(BaseModel):
+    thinking: str = Field(..., description="The thinking to perform")
+    movies: list[str] = Field(..., description="The movies to do idk")
+
+
+class TestBasicResponse:
+    def test_basic_response(self):
+        xml = load_test_file("basic_response.xml")
+        result: BasicResponse = parse_xml(xml, BasicResponse)
+        assert result.thinking.strip() != ""
+        assert len(result.movies) > 0
+
+    def test_basic_response_streaming(self):
+        xml = load_test_file("basic_response.xml")
+        partial_content = ""
+        last_valid_result = None
+        for char in xml:
+            partial_content += char
+            result = parse_xml(partial_content, BasicResponse)
+            validate_parsed_model(result, BasicResponse)
+            last_valid_result = result
+
+        assert last_valid_result is not None
+        assert isinstance(last_valid_result, BasicResponse)
+        assert last_valid_result.thinking.strip() != ""
+        assert len(last_valid_result.movies) > 0
+
+
+class CreateAction(BaseModel):
     new_file_path: str = Field(..., description="The path to the new file to create")
     file_contents: str = Field(
         ..., description="The contents of the new file to create"
@@ -36,7 +149,6 @@ class CreateAction(BaseModel):
 
 
 class EditAction(BaseModel):
-    action_type: Literal["edit"] = Field(...)
     original_file_path: str = Field(
         ..., description="The path to the original file to edit"
     )
@@ -44,9 +156,6 @@ class EditAction(BaseModel):
 
 
 class CommandAction(BaseModel):
-    action_type: Literal["command"] = Field(
-        ..., description="The type of action to perform"
-    )
     command: str = Field(..., description="The command to run")
 
 
@@ -59,9 +168,9 @@ class CodeAction(BaseModel):
 
 class TestActions:
     def test_complete_response(self):
-        """Test parsing a complete response with multiple actions."""
+        # Test parsing a complete response with multiple actions
         xml = load_test_file("complete.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert result.thinking.strip() != ""
         assert "Component Structure:" in result.thinking
@@ -86,19 +195,19 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+            result = parse_xml(partial_content, CodeAction)
+
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
         assert len(last_valid_result.actions) > 0
 
     def test_partial_response(self):
-        """Test parsing a partial response with incomplete action."""
+        # Test parsing a partial response with incomplete action
         xml = load_test_file("partial.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
@@ -116,19 +225,18 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+            result = parse_xml(partial_content, CodeAction)
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
         assert len(last_valid_result.actions) == 1
 
     def test_streaming_response(self):
-        """Test parsing a streaming response that's cut off mid-element."""
+        # Test parsing a streaming response that's cut off mid-element
         xml = load_test_file("streaming.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
@@ -146,21 +254,21 @@ class TestActions:
         xml = load_test_file("streaming.xml")
         partial_content = ""
         last_valid_result = None
+
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+            result = parse_xml(partial_content, CodeAction)
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
         assert len(last_valid_result.actions) == 1
 
     def test_empty_response(self):
-        """Test parsing an empty response."""
+        # Test parsing an empty response.
         xml = ""
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
         assert result.thinking == ""
         assert len(result.actions) == 0
 
@@ -209,7 +317,7 @@ class TestMovies:
 </movies>
 </response>
         """
-        result = parse_xml(ResponseObject, xml)
+        result = parse_xml(xml, ResponseObject)
         assert len(result.response.movies) == 5
         assert result.response.movies[0].title == "Avatar"
 
@@ -243,10 +351,10 @@ class TestMovies:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(ResponseObject, partial_content)
-            if result is not None:
-                validate_parsed_model(result, ResponseObject)
-                last_valid_result = result
+            result = parse_xml(partial_content, ResponseObject)
+
+            validate_parsed_model(result, ResponseObject)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, ResponseObject)
@@ -254,7 +362,7 @@ class TestMovies:
 
     def test_empty_movies(self):
         xml = """<response>"""
-        result = parse_xml(ResponseObject, xml)
+        result = parse_xml(xml, ResponseObject)
         assert result.response.movies == []
 
 
@@ -272,7 +380,7 @@ class TestDetails:
     def test_details(self):
         """Test parsing a response with details."""
         xml = load_test_file("details.xml")
-        result = parse_xml(Details, xml)
+        result = parse_xml(xml, Details)
 
         assert len(result.birth_date.split("-")) == 3
         assert result.age > 0
@@ -285,68 +393,19 @@ class TestDetails:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(Details, partial_content)
-            if result is not None:
-                validate_parsed_model(result, Details)
-                last_valid_result = result
+            result = parse_xml(partial_content, Details)
+
+            validate_parsed_model(result, Details)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, Details)
         assert len(last_valid_result.birth_date.split("-")) == 3
 
 
-class Result(BaseModel):
-    type: str = Field(...)
-    data: dict[str, Any] = Field(...)
-
-
-class CustomResponse(BaseModel):
-    status: str = Field(...)
-    result: Result = Field(...)
-
-
-class TestCustom:
-    def test_custom_model(self):
-        """Test that parser works with custom model structures."""
-        xml = load_test_file("custom.xml")
-        result = parse_xml(CustomResponse, xml)
-
-        assert isinstance(result, CustomResponse)
-        assert result.status in ["success", "error"]
-        assert result.result.type == "playlist_update"
-        assert isinstance(result.result.data, dict)
-        assert "tracks" in result.result.data
-        assert isinstance(result.result.data["tracks"], list)
-        assert len(result.result.data["tracks"]) > 0
-
-        track = result.result.data["tracks"][0]
-        assert all(key in track for key in ["id", "title", "artist"])
-
-    def test_custom_model_streaming(self):
-        xml = load_test_file("custom.xml")
-        partial_content = ""
-        last_valid_result = None
-
-        for char in xml:
-            partial_content += char
-            result = parse_xml(CustomResponse, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CustomResponse)
-                last_valid_result = result
-
-        assert last_valid_result is not None
-        assert isinstance(last_valid_result, CustomResponse)
-        assert last_valid_result.status in ["success", "error"]
-        assert last_valid_result.result.type == "playlist_update"
-        assert isinstance(last_valid_result.result.data, dict)
-        assert "tracks" in last_valid_result.result.data
-        assert isinstance(last_valid_result.result.data["tracks"], list)
-        assert len(last_valid_result.result.data["tracks"]) > 0
-
-
 class ChunkInfo(BaseModel):
     file_path: str = Field(..., description="The path of the file")
-    content: XMLSafeString = Field(..., description="The content of the chunk")
+    content: str = Field(..., description="The content of the chunk")
 
 
 class SearchResult(BaseModel):
@@ -365,7 +424,7 @@ class SearchResponse(BaseModel):
 class TestSearch:
     def test_search_response(self):
         search_file: str = load_test_file("search.xml")
-        parsed = parse_xml(SearchResponse, search_file)
+        parsed = parse_xml(search_file, SearchResponse)
         validate_parsed_model(parsed, SearchResponse)
 
         # Validate specific fields
@@ -385,10 +444,9 @@ class TestSearch:
         last_valid_result = None
         for char in search_file:
             partial_content += char
-            result = parse_xml(SearchResponse, partial_content)
-            if result is not None:
-                validate_parsed_model(result, SearchResponse)
-                last_valid_result = result
+            result = parse_xml(partial_content, SearchResponse)
+            validate_parsed_model(result, SearchResponse)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, SearchResponse)

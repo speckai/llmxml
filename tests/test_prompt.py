@@ -1,7 +1,8 @@
 from typing import List, Literal, Union
 
-from llmxml.prompting import generate_prompt_template
 from pydantic import BaseModel, Field
+
+from llmxml.prompting import generate_example, generate_prompt_template
 
 
 class CreateAction(BaseModel):
@@ -102,6 +103,7 @@ def test_empty_model():
 
 def test_optional_fields():
     """Test prompt generation for a model with optional fields."""
+
     class ModelWithOptional(BaseModel):
         required_field: str = Field(..., description="A required field")
         optional_field: str | None = Field(None, description="An optional field")
@@ -115,3 +117,24 @@ def test_optional_fields():
     )
     print(expected)
     assert result == expected
+
+
+def test_example_generation():
+    example_action = Action(
+        thinking="Thinking about the action",
+        actions=[
+            CreateAction(
+                action_type="create",
+                new_file_path="file.txt",
+                file_contents="Hello, world!",
+            )
+        ],
+    )
+
+    generated_example: str = generate_example(example_action)
+    assert generated_example is not None
+    assert generated_example != ""
+
+
+if __name__ == "__main__":
+    test_optional_fields()
