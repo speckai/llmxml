@@ -10,11 +10,11 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 """
 XML Parsing Flow:
-1. parse_xml(model, xml) -> Entry point
+1. parse_xml(xml, model) -> Entry point
     - Inspects model structure with _inspect_type_annotation()
     - Calls _parse_xml() with fallback option if initial parse fails
 
-2. _parse_xml(model, xml, type_dict) -> Handles XML cleaning and parsing
+2. _parse_xml(xml, model, type_dict) -> Handles XML cleaning and parsing
     - Cleans XML with _clean_xml() or _clean_xml_fallback()
     - Initiates recursive parsing with _recurse()
     - Fills missing fields with _fill_with_empty()
@@ -424,49 +424,6 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
     return parsed_dict
 
 
-def _parse_xml(
-    model: Type[ModelType],
-    xml_content: str,
-    type_dict: dict,
-    failed_initial: bool = False,
-) -> ModelType:
-    """
-    Parse the XML content into a Pydantic model.
-    :param model: The Pydantic model to parse
-    :param xml_content: The XML content to parse
-    :param type_dict: The type dictionary from inspect_type_annotation
-    :param failed_initial: If the initial parse failed, clean the XML content
-    :return: The parsed Pydantic model
-    """
-    if failed_initial:
-        xml_content: str = _clean_xml(xml_content)
-
-    parsed_dict: dict
-    parsed_dict, _, _ = _recurse(xml_content, type_dict, 0)
-    if not parsed_dict:
-        parsed_dict = {}
-    parsed_dict = _fill_with_empty(parsed_dict, type_dict)
-
-    return model(**parsed_dict)
-
-
-def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
-    """
-    Parse the XML content into a Pydantic model.
-    :param model: The Pydantic model to parse
-    :param xml_content: The XML content to parse
-    :return: The parsed Pydantic model
-    """
-    assert isinstance(model, type) and issubclass(
-        model, BaseModel
-    ), "Model must be a Pydantic model"
-    type_dict: dict = _inspect_type_annotation(model)
-    try:
-        return _parse_xml(model, xml_content, type_dict)
-    except Exception:
-        return _parse_xml(model, xml_content, type_dict, failed_initial=True)
-
-
 def _handle_list_field(field_type: type, field_value: Any) -> tuple[Any, Any]:
     """
     Handle list fields for partial model creation.
@@ -571,3 +528,46 @@ def _convert_enum_content(enum_type: type[Enum], content: str) -> Enum | str | N
     except (IndexError, ValueError):
         # If out of range or invalid integer, default to None (pydantic may raise validation error if required)
         return None
+
+
+def _parse_xml(
+    xml_content: str,
+    model: Type[ModelType],
+    type_dict: dict,
+    failed_initial: bool = False,
+) -> ModelType:
+    """
+    Parse the XML content into a Pydantic model.
+    :param model: The Pydantic model to parse
+    :param xml_content: The XML content to parse
+    :param type_dict: The type dictionary from inspect_type_annotation
+    :param failed_initial: If the initial parse failed, clean the XML content
+    :return: The parsed Pydantic model
+    """
+    if failed_initial:
+        xml_content: str = _clean_xml(xml_content)
+
+    parsed_dict: dict
+    parsed_dict, _, _ = _recurse(xml_content, type_dict, 0)
+    if not parsed_dict:
+        parsed_dict = {}
+    parsed_dict = _fill_with_empty(parsed_dict, type_dict)
+
+    return model(**parsed_dict)
+
+
+def parse_xml(xml_content: str, model: Type[ModelType]) -> ModelType:
+    """
+    Parse the XML content into a Pydantic model.
+    :param xml_content: The XML content to parse
+    :param model: The Pydantic model to parse
+    :return: The parsed Pydantic model
+    """
+    assert isinstance(model, type) and issubclass(
+        model, BaseModel
+    ), "Model must be a Pydantic model"
+    type_dict: dict = _inspect_type_annotation(model)
+    try:
+        return _parse_xml(xml_content, model, type_dict)
+    except Exception:
+        return _parse_xml(xml_content, model, type_dict, failed_initial=True)

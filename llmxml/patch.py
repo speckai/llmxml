@@ -1,7 +1,7 @@
-from enum import Enum
-from typing import Any, Callable, Type, TypeVar, Union, Awaitable
 import inspect
-from functools import wraps
+from enum import Enum
+from typing import Any, Callable, Type, TypeVar, Union
+
 from pydantic import BaseModel
 
 from .parser import parse_xml
@@ -9,10 +9,12 @@ from .prompting import generate_prompt_template
 
 T = TypeVar("T", bound=BaseModel)
 
+
 class Mode(Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
+
 
 def is_async_function(func: Callable[..., Any]) -> bool:
     """Returns true if the callable is async, accounting for wrapped callables"""
@@ -22,6 +24,7 @@ def is_async_function(func: Callable[..., Any]) -> bool:
         is_coroutine = is_coroutine or inspect.iscoroutinefunction(func)
     return is_coroutine
 
+
 def _extract_content(response: Any) -> str:
     """
     Extract the main content from the response depending on provider.
@@ -29,12 +32,20 @@ def _extract_content(response: Any) -> str:
     """
     # Anthropic structure:
     # response.content[0].text
-    if hasattr(response, "content") and response.content and hasattr(response.content[0], "text"):
+    if (
+        hasattr(response, "content")
+        and response.content
+        and hasattr(response.content[0], "text")
+    ):
         return response.content[0].text
 
     # OpenAI structure:
     # response.choices[0].message.content
-    if hasattr(response, "choices") and response.choices and hasattr(response.choices[0], "message"):
+    if (
+        hasattr(response, "choices")
+        and response.choices
+        and hasattr(response.choices[0], "message")
+    ):
         return response.choices[0].message.content
 
     # Gemini-like structure:
@@ -56,7 +67,9 @@ def _extract_content(response: Any) -> str:
     # Fallback: just convert to string
     return str(response)
 
+
 PromptGenerator = Callable[[str], str]
+
 
 class BasePatchedClient:
     """
@@ -64,10 +77,9 @@ class BasePatchedClient:
     Provides common logic for inserting prompts and parsing responses.
     """
 
-    def __init__(self, 
-                 client: Any, 
-                 mode: Mode, 
-                 custom_prompt: PromptGenerator | None = None):
+    def __init__(
+        self, client: Any, mode: Mode, custom_prompt: PromptGenerator | None = None
+    ):
         self.client = client
         self.mode = mode
         self.custom_prompt = custom_prompt
@@ -91,12 +103,16 @@ class BasePatchedClient:
         self._orig_method = create_func
 
     def _patch_gemini(self):
-        if hasattr(self.client, "generate_content_async") and is_async_function(self.client.generate_content_async):
+        if hasattr(self.client, "generate_content_async") and is_async_function(
+            self.client.generate_content_async
+        ):
             self._orig_method = self.client.generate_content_async
         elif hasattr(self.client, "generate_content"):
             self._orig_method = self.client.generate_content
         else:
-            raise AttributeError("Gemini client does not have a suitable generate_content method")
+            raise AttributeError(
+                "Gemini client does not have a suitable generate_content method"
+            )
 
     def _patch_anthropic(self):
         create_func = getattr(self.client.messages, "create", None)
@@ -109,8 +125,12 @@ class BasePatchedClient:
     def _insert_prompt(self, response_model: Type[T], kwargs: dict) -> None:
         """Insert a user prompt for the given response_model."""
         schema = generate_prompt_template(response_model, include_instructions=False)
-        prompt = self.custom_prompt(schema) if self.custom_prompt is not None else generate_prompt_template(response_model)
-        
+        prompt = (
+            self.custom_prompt(schema)
+            if self.custom_prompt is not None
+            else generate_prompt_template(response_model)
+        )
+
         if "messages" in kwargs and isinstance(kwargs["messages"], list):
             kwargs["messages"].insert(0, {"role": "user", "content": prompt})
 
@@ -128,7 +148,7 @@ class SyncPatchedClient(BasePatchedClient):
     @property
     def completions(self) -> "SyncPatchedClient":
         return self
-    
+
     @property
     def messages(self) -> "SyncPatchedClient":
         return self
@@ -140,7 +160,7 @@ class SyncPatchedClient(BasePatchedClient):
         response = self._orig_method(**kwargs)
         if response_model:
             content = _extract_content(response)
-            return parse_xml(response_model, content)
+            return parse_xml(content, response_model)
         return response
 
 
@@ -157,7 +177,7 @@ class AsyncPatchedClient(BasePatchedClient):
     @property
     def completions(self) -> "AsyncPatchedClient":
         return self
-    
+
     @property
     def messages(self) -> "AsyncPatchedClient":
         return self
@@ -169,11 +189,13 @@ class AsyncPatchedClient(BasePatchedClient):
         response = await self._orig_method(**kwargs)
         if response_model:
             content = _extract_content(response)
-            return parse_xml(response_model, content)
+            return parse_xml(content, response_model)
         return response
 
 
-def from_openai(client: Any, custom_prompt: PromptGenerator | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+def from_openai(
+    client: Any, custom_prompt: PromptGenerator | None = None
+) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     dummy = client.chat.completions.create
     is_async = is_async_function(dummy)
     if is_async:
@@ -181,12 +203,18 @@ def from_openai(client: Any, custom_prompt: PromptGenerator | None = None) -> Un
     return SyncPatchedClient(client, Mode.OPENAI, custom_prompt=custom_prompt)
 
 
-def from_anthropic(client: Any, custom_prompt: PromptGenerator | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+def from_anthropic(
+    client: Any, custom_prompt: PromptGenerator | None = None
+) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     # Detect async or sync based on messages.create
     create_func = None
     if hasattr(client, "messages") and hasattr(client.messages, "create"):
         create_func = client.messages.create
-    elif hasattr(client, "beta") and hasattr(client.beta, "messages") and hasattr(client.beta.messages, "create"):
+    elif (
+        hasattr(client, "beta")
+        and hasattr(client.beta, "messages")
+        and hasattr(client.beta.messages, "create")
+    ):
         create_func = client.beta.messages.create
 
     if create_func is None:
@@ -196,11 +224,18 @@ def from_anthropic(client: Any, custom_prompt: PromptGenerator | None = None) ->
         return AsyncPatchedClient(client, Mode.ANTHROPIC, custom_prompt=custom_prompt)
     return SyncPatchedClient(client, Mode.ANTHROPIC, custom_prompt=custom_prompt)
 
-def from_gemini(client: Any, custom_prompt: PromptGenerator | None = None) -> Union[SyncPatchedClient, AsyncPatchedClient]:
+
+def from_gemini(
+    client: Any, custom_prompt: PromptGenerator | None = None
+) -> Union[SyncPatchedClient, AsyncPatchedClient]:
     # TODO: fix. rn just use the gemini api through the openai client. look at the docs for more.
-    if hasattr(client, "generate_content_async") and is_async_function(client.generate_content_async):
+    if hasattr(client, "generate_content_async") and is_async_function(
+        client.generate_content_async
+    ):
         return AsyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)
-    elif hasattr(client, "generate_content") and is_async_function(client.generate_content):
+    elif hasattr(client, "generate_content") and is_async_function(
+        client.generate_content
+    ):
         return AsyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)
     elif hasattr(client, "generate_content"):
         return SyncPatchedClient(client, Mode.GEMINI, custom_prompt=custom_prompt)

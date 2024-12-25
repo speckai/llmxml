@@ -78,12 +78,12 @@ class EnumSearchResponse(BaseModel):
 class TestFileAction:
     def test_enum_basic(self):
         xml = load_test_file("enum_basic.xml")
-        result: FileAction = parse_xml(FileAction, xml)
+        result: FileAction = parse_xml(xml, FileAction)
         assert result.file_operation == FileOperation.OPEN
 
     def test_enum_nested(self):
         xml = load_test_file("enum_nested.xml")
-        result: EnumSearchResponse = parse_xml(EnumSearchResponse, xml)
+        result: EnumSearchResponse = parse_xml(xml, EnumSearchResponse)
         assert result.search_results[0].search_result_type == SearchResultType.IMAGE
         assert result.search_results[1].search_result_type == SearchResultType.VIDEO
 
@@ -96,7 +96,7 @@ class TestFileAction:
 
         for char in xml:
             partial_content += char
-            result = parse_xml(EnumSearchResponse, partial_content)
+            result = parse_xml(partial_content, EnumSearchResponse)
             validate_parsed_model(result, EnumSearchResponse)
             last_valid_result = result
 
@@ -121,7 +121,7 @@ class BasicResponse(BaseModel):
 class TestBasicResponse:
     def test_basic_response(self):
         xml = load_test_file("basic_response.xml")
-        result: BasicResponse = parse_xml(BasicResponse, xml)
+        result: BasicResponse = parse_xml(xml, BasicResponse)
         assert result.thinking.strip() != ""
         assert len(result.movies) > 0
 
@@ -131,7 +131,7 @@ class TestBasicResponse:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(BasicResponse, partial_content)
+            result = parse_xml(partial_content, BasicResponse)
             validate_parsed_model(result, BasicResponse)
             last_valid_result = result
 
@@ -170,7 +170,7 @@ class TestActions:
     def test_complete_response(self):
         # Test parsing a complete response with multiple actions
         xml = load_test_file("complete.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert result.thinking.strip() != ""
         assert "Component Structure:" in result.thinking
@@ -195,7 +195,7 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
+            result = parse_xml(partial_content, CodeAction)
 
             validate_parsed_model(result, CodeAction)
             last_valid_result = result
@@ -207,7 +207,7 @@ class TestActions:
     def test_partial_response(self):
         # Test parsing a partial response with incomplete action
         xml = load_test_file("partial.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
@@ -225,7 +225,7 @@ class TestActions:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
+            result = parse_xml(partial_content, CodeAction)
             validate_parsed_model(result, CodeAction)
             last_valid_result = result
 
@@ -236,7 +236,7 @@ class TestActions:
     def test_streaming_response(self):
         # Test parsing a streaming response that's cut off mid-element
         xml = load_test_file("streaming.xml")
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
 
         assert "Component Structure:" in result.thinking
         assert "Implementation Details:" in result.thinking
@@ -257,7 +257,7 @@ class TestActions:
 
         for char in xml:
             partial_content += char
-            result = parse_xml(CodeAction, partial_content)
+            result = parse_xml(partial_content, CodeAction)
             validate_parsed_model(result, CodeAction)
             last_valid_result = result
 
@@ -268,7 +268,7 @@ class TestActions:
     def test_empty_response(self):
         # Test parsing an empty response.
         xml = ""
-        result = parse_xml(CodeAction, xml)
+        result = parse_xml(xml, CodeAction)
         assert result.thinking == ""
         assert len(result.actions) == 0
 
@@ -317,7 +317,7 @@ class TestMovies:
 </movies>
 </response>
         """
-        result = parse_xml(ResponseObject, xml)
+        result = parse_xml(xml, ResponseObject)
         assert len(result.response.movies) == 5
         assert result.response.movies[0].title == "Avatar"
 
@@ -351,7 +351,7 @@ class TestMovies:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(ResponseObject, partial_content)
+            result = parse_xml(partial_content, ResponseObject)
 
             validate_parsed_model(result, ResponseObject)
             last_valid_result = result
@@ -362,7 +362,7 @@ class TestMovies:
 
     def test_empty_movies(self):
         xml = """<response>"""
-        result = parse_xml(ResponseObject, xml)
+        result = parse_xml(xml, ResponseObject)
         assert result.response.movies == []
 
 
@@ -380,7 +380,7 @@ class TestDetails:
     def test_details(self):
         """Test parsing a response with details."""
         xml = load_test_file("details.xml")
-        result = parse_xml(Details, xml)
+        result = parse_xml(xml, Details)
 
         assert len(result.birth_date.split("-")) == 3
         assert result.age > 0
@@ -393,7 +393,7 @@ class TestDetails:
         last_valid_result = None
         for char in xml:
             partial_content += char
-            result = parse_xml(Details, partial_content)
+            result = parse_xml(partial_content, Details)
 
             validate_parsed_model(result, Details)
             last_valid_result = result
@@ -424,7 +424,7 @@ class SearchResponse(BaseModel):
 class TestSearch:
     def test_search_response(self):
         search_file: str = load_test_file("search.xml")
-        parsed = parse_xml(SearchResponse, search_file)
+        parsed = parse_xml(search_file, SearchResponse)
         validate_parsed_model(parsed, SearchResponse)
 
         # Validate specific fields
@@ -444,7 +444,7 @@ class TestSearch:
         last_valid_result = None
         for char in search_file:
             partial_content += char
-            result = parse_xml(SearchResponse, partial_content)
+            result = parse_xml(partial_content, SearchResponse)
             validate_parsed_model(result, SearchResponse)
             last_valid_result = result
 
