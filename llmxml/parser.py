@@ -8,8 +8,25 @@ from pydantic import BaseModel, create_model
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
+"""
+XML Parsing Flow:
+1. parse_xml(model, xml) -> Entry point
+    - Inspects model structure with _inspect_type_annotation()
+    - Calls _parse_xml() with fallback option if initial parse fails
 
-def camel_to_snake(string: str) -> str:
+2. _parse_xml(model, xml, type_dict) -> Handles XML cleaning and parsing
+    - Cleans XML with _clean_xml() or _clean_xml_fallback()
+    - Initiates recursive parsing with _recurse()
+    - Fills missing fields with _fill_with_empty()
+
+3. _recurse(xml, open_arg, pos) -> Core parsing logic
+    - Processes XML content recursively
+    - Handles lists, models, and primitive types
+    - Uses _handle_primitive_content(), _handle_no_matches(), _handle_closing_tag()
+"""
+
+
+def _camel_to_snake(string: str) -> str:
     """
     Convert a camelCase string to a snake_case string.
     :param string: The string to convert
@@ -18,7 +35,7 @@ def camel_to_snake(string: str) -> str:
     return re.sub("(?!^)([A-Z]+)", r"_\1", string).lower()
 
 
-def inspect_type_annotation(annotation, name: str = "") -> dict:
+def _inspect_type_annotation(annotation, name: str = "") -> dict:
     """
     Recursively inspect a type annotation to extract its components.
 
@@ -39,7 +56,7 @@ def inspect_type_annotation(annotation, name: str = "") -> dict:
         return {
             "origin": origin,
             "name": name,
-            "args": [inspect_type_annotation(arg) for arg in args],
+            "args": [_inspect_type_annotation(arg) for arg in args],
         }
 
     # Mainly for Union
@@ -49,13 +66,13 @@ def inspect_type_annotation(annotation, name: str = "") -> dict:
 
         return {
             "origin": origin,
-            "args": [inspect_type_annotation(arg, name) for arg in args],
+            "args": [_inspect_type_annotation(arg, name) for arg in args],
         }
 
     # For pydantic models
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         origin: type = annotation
-        name: str = camel_to_snake(annotation.__name__)
+        name: str = _camel_to_snake(annotation.__name__)
         args: list = [
             (value.annotation, field)
             for field, value in annotation.model_fields.items()
@@ -65,7 +82,7 @@ def inspect_type_annotation(annotation, name: str = "") -> dict:
             "origin": origin,
             "name": name,
             "args": [
-                inspect_type_annotation(arg, arg_name) for (arg, arg_name) in args
+                _inspect_type_annotation(arg, arg_name) for (arg, arg_name) in args
             ],
         }
 
@@ -217,15 +234,114 @@ def _get_default_for_primitive(arg: dict) -> Union[str, int, float, bool, None]:
     return None
 
 
+def _handle_primitive_content(
+    xml_content: str, open_arg: dict, pos: int
+) -> tuple[Any, int, bool]:
+    """
+    Handle primitive content parsing from XML.
+    :param xml_content: The XML content to parse
+    :param open_arg: The current opening tag dictionary
+    :param pos: The current position in the XML content
+    :return: A tuple of (content, new position, has_content)
+    """
+    opening_tag_string: str = f"<{open_arg['name']}>"
+    opening_tag_idx: int = xml_content.rfind(opening_tag_string, 0, len(xml_content))
+    content: str = xml_content[opening_tag_idx + len(opening_tag_string) :]
+    return content, len(xml_content), True
+
+
+def _handle_no_matches(
+    xml_content: str,
+    open_arg: dict,
+    attribute_list: list,
+    attribute_dict: dict,
+    possible_next_opening_tags: dict,
+) -> tuple[Any, int, bool]:
+    """
+    Handle case when no opening or closing tags are found.
+    :param xml_content: The XML content to parse
+    :param open_arg: The current opening tag dictionary
+    :param attribute_list: The list of attributes collected so far
+    :param attribute_dict: The dictionary of attributes collected so far
+    :param possible_next_opening_tags: Dictionary of possible next opening tags
+    :return: A tuple of (parsed content, new position, has_content)
+    """
+    if _is_list_type(open_arg["origin"]):
+        if not attribute_list:
+            return [], len(xml_content), False
+        return (
+            attribute_list[:-1]
+            + [
+                _fill_with_empty(
+                    attribute_list[-1], possible_next_opening_tags[open_arg["name"]]
+                )
+            ],
+            len(xml_content),
+            False,
+        )
+
+    if _is_pydantic_model(open_arg["origin"]):
+        return _fill_with_empty(attribute_dict, open_arg), len(xml_content), False
+
+    return _handle_primitive_content(xml_content, open_arg, len(xml_content))
+
+
+def _handle_closing_tag(
+    xml_content: str,
+    open_arg: dict,
+    attribute_list: list,
+    attribute_dict: dict,
+    pos: int,
+    closing_match: re.Match,
+) -> tuple[Any, int, bool]:
+    """
+    Handle closing tag parsing.
+    :param xml_content: The XML content to parse
+    :param open_arg: The current opening tag dictionary
+    :param attribute_list: The list of attributes collected so far
+    :param attribute_dict: The dictionary of attributes collected so far
+    :param pos: The current position in the XML content
+    :param closing_match: The regex match object for the closing tag
+    :return: A tuple of (parsed content, new position, has_content)
+    """
+    if _is_list_type(open_arg["origin"]):
+        if not attribute_list and any(arg.get("args", []) for arg in open_arg["args"]):
+            first_variant = open_arg["args"][0]
+            empty_dict = _fill_with_empty({}, first_variant)
+            return [empty_dict], closing_match.end(), True
+        return attribute_list, closing_match.end(), True
+
+    if _is_pydantic_model(open_arg["origin"]):
+        if not attribute_dict:
+            return {}, closing_match.end(), True
+        return attribute_dict, closing_match.end(), True
+
+    # Handle primitive or Enum content
+    opening_tag_string = f"<{open_arg['name']}>"
+    opening_tag_idx = xml_content.rfind(opening_tag_string, 0, pos)
+    content = xml_content[
+        opening_tag_idx + len(opening_tag_string) : closing_match.start()
+    ]
+
+    if isinstance(open_arg["origin"], type) and issubclass(open_arg["origin"], Enum):
+        content = content.strip()
+        enum_value = _convert_enum_content(open_arg["origin"], content)
+        attribute_dict[open_arg["name"]] = enum_value
+        return enum_value, closing_match.end(), True
+
+    attribute_dict[open_arg["name"]] = content
+    return content, closing_match.end(), True
+
+
 def _recurse(
     xml_content: str, open_arg: dict, pos: int
 ) -> tuple[Union[dict, list], int, bool]:
     """
     Recursively parse the XML content.
     :param xml_content: The XML content to parse
-    :param open_arg: The current opening tag
+    :param open_arg: The current opening tag dictionary
     :param pos: The current position in the XML content
-    :return: A tuple containing the parsed result, the new position, and a boolean indicating if there is content
+    :return: A tuple of (parsed content, new position, has_content)
     """
     possible_next_opening_tags: dict = _get_possible_opening_tags(
         open_arg, {open_arg.get("name", "")}
@@ -239,47 +355,26 @@ def _recurse(
         attribute_dict[open_arg["name"]] = []
 
     while pos < len(xml_content):
+        # Find next opening and closing tags
         open_tag_pattern: str = "|".join(possible_next_opening_tags.keys())
         opening_tag_regex: re.Pattern = re.compile(f"<({open_tag_pattern})>")
         opening_match: Union[re.Match, None] = opening_tag_regex.search(
             xml_content, pos
         )
-        if len(possible_next_opening_tags) == 0:
+        if not possible_next_opening_tags:
             opening_match = None
 
         close_tag_regex: re.Pattern = re.compile(f"</({open_arg['name']})>")
         closing_match: Union[re.Match, None] = close_tag_regex.search(xml_content, pos)
 
         if not opening_match and not closing_match:
-            if _is_list_type(open_arg["origin"]):
-                if not attribute_list:
-                    return [], len(xml_content), False
-                return (
-                    attribute_list[:-1]
-                    + [
-                        _fill_with_empty(
-                            attribute_list[-1],
-                            possible_next_opening_tags[open_arg["name"]],
-                        )
-                    ],
-                    len(xml_content),
-                    False,
-                )
-
-            if _is_pydantic_model(open_arg["origin"]):
-                return (
-                    _fill_with_empty(attribute_dict, open_arg),
-                    len(xml_content),
-                    False,
-                )
-
-            # Primitive (final fallback)
-            opening_tag_string: str = f"<{open_arg['name']}>"
-            opening_tag_idx: int = xml_content.rfind(
-                opening_tag_string, 0, len(xml_content)
+            return _handle_no_matches(
+                xml_content,
+                open_arg,
+                attribute_list,
+                attribute_dict,
+                possible_next_opening_tags,
             )
-            content: str = xml_content[opening_tag_idx + len(opening_tag_string) :]
-            return content, len(xml_content), True
 
         if opening_match and (
             not closing_match or opening_match.start() < closing_match.start()
@@ -297,40 +392,15 @@ def _recurse(
                 attribute_dict[new_open_arg["name"]] = dict_entry
 
             pos = new_pos
-
         elif closing_match:
-            if _is_list_type(open_arg["origin"]):
-                if not attribute_list and any(
-                    arg.get("args", []) for arg in open_arg["args"]
-                ):
-                    first_variant = open_arg["args"][0]
-                    empty_dict = _fill_with_empty({}, first_variant)
-                    return [empty_dict], closing_match.end(), True
-                return attribute_list, closing_match.end(), True
-
-            if _is_pydantic_model(open_arg["origin"]):
-                if not attribute_dict:
-                    return {}, closing_match.end(), True
-                return attribute_dict, closing_match.end(), True
-
-            # Primitive or Enum
-            opening_tag_string = f"<{open_arg['name']}>"
-            opening_tag_idx = xml_content.rfind(opening_tag_string, 0, pos)
-            content = xml_content[
-                opening_tag_idx + len(opening_tag_string) : closing_match.start()
-            ]
-
-            # If this is an Enum, perform special handling to map numeric or string.
-            if isinstance(open_arg["origin"], type) and issubclass(
-                open_arg["origin"], Enum
-            ):
-                content = content.strip()
-                enum_value = _convert_enum_content(open_arg["origin"], content)
-                attribute_dict[open_arg["name"]] = enum_value
-                return enum_value, closing_match.end(), True
-            else:
-                attribute_dict[open_arg["name"]] = content
-                return content, closing_match.end(), True
+            return _handle_closing_tag(
+                xml_content,
+                open_arg,
+                attribute_list,
+                attribute_dict,
+                pos,
+                closing_match,
+            )
 
     if _is_list_type(open_arg["origin"]):
         return attribute_list, len(xml_content), has_child_content
@@ -342,7 +412,6 @@ def _recurse(
             has_child_content,
         )
 
-    # Primitive fallback
     return _get_default_for_primitive(open_arg), len(xml_content), False
 
 
@@ -404,14 +473,65 @@ def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
     :param xml_content: The XML content to parse
     :return: The parsed Pydantic model
     """
-    type_dict = inspect_type_annotation(model)
+    type_dict = _inspect_type_annotation(model)
     try:
         return _parse_xml(model, xml_content, type_dict)
     except Exception:
         return _parse_xml(model, xml_content, type_dict, fallback=True)
 
 
-def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
+def _handle_list_field(field_type: type, field_value: Any) -> tuple[Any, Any]:
+    """
+    Handle list fields for partial model creation.
+    :param field_type: The type of the field
+    :param field_value: The value of the field
+    :return: A tuple of (field type, field value)
+    """
+    if field_value is None or field_value == []:
+        return (list, [])
+
+    inner_type = get_args(field_type)[0]
+    if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
+        new_value = [
+            _make_partial(inner_type, item) if isinstance(item, dict) else item
+            for item in field_value
+        ]
+        return (list[inner_type], new_value)
+    return (list[inner_type], field_value)
+
+
+def _handle_union_field(field_type: type, field_value: Any) -> tuple[Any, Any]:
+    """
+    Handle union fields for partial model creation.
+    :param field_type: The type of the field
+    :param field_value: The value of the field
+    :return: A tuple of (field type, field value)
+    """
+    if field_value is None:
+        return (field_type, None)
+
+    for possible_type in get_args(field_type):
+        if isinstance(possible_type, type) and issubclass(possible_type, BaseModel):
+            try:
+                return (field_type, _make_partial(possible_type, field_value))
+            except Exception:
+                continue
+    return (field_type, field_value)
+
+
+def _handle_nested_model(field_type: type, field_value: Any) -> tuple[Any, Any]:
+    """
+    Handle nested model fields for partial model creation.
+    :param field_type: The type of the field
+    :param field_value: The value of the field
+    :return: A tuple of (field type, field value)
+    """
+    if field_value is None:
+        return (field_type, None)
+    return (field_type, _make_partial(field_type, field_value))
+
+
+def _make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
     """
     Creates a partial version of a Pydantic model where missing fields become None
     and nested models are also made partial.
@@ -420,77 +540,28 @@ def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
     :param data: The data dictionary to parse
     :return: A new instance of the model with partial fields
     """
-    # Get all fields and their types from the model
-    fields: dict = model.model_fields
-
-    # Prepare new field definitions
+    fields = model.model_fields
     new_fields: dict[str, tuple[Any, Any]] = {}
 
     for field_name, field in fields.items():
-        field_type: type = field.annotation
-        field_value: Any = data.get(field_name)
+        field_type = field.annotation
+        field_value = data.get(field_name)
 
-        # Handle lists
         if get_origin(field_type) is list:
-            if field_value is None or field_value == []:
-                new_fields[field_name] = (list, [])
-                continue
-
-            # Get the type inside the list
-            inner_type: type = get_args(field_type)[0]
-            if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
-                # Make each item in the list partial
-                new_value: list = [
-                    make_partial(inner_type, item) if isinstance(item, dict) else item
-                    for item in field_value
-                ]
-                new_fields[field_name] = (list[inner_type], new_value)
-            else:
-                new_fields[field_name] = (list[inner_type], field_value)
-
-        # Handle nested models
+            new_fields[field_name] = _handle_list_field(field_type, field_value)
         elif isinstance(field_type, type) and issubclass(field_type, BaseModel):
-            if field_value is None:
-                new_fields[field_name] = (field_type, None)
-            else:
-                new_fields[field_name] = (
-                    field_type,
-                    make_partial(field_type, field_value),
-                )
-
-        # Handle Union types
+            new_fields[field_name] = _handle_nested_model(field_type, field_value)
         elif get_origin(field_type) is Union:
-            if field_value is None:
-                new_fields[field_name] = (field_type, None)
-            else:
-                # Try to determine the correct type from the Union
-                for possible_type in get_args(field_type):
-                    if isinstance(possible_type, type) and issubclass(
-                        possible_type, BaseModel
-                    ):
-                        try:
-                            new_fields[field_name] = (
-                                field_type,
-                                make_partial(possible_type, field_value),
-                            )
-                            break
-                        except Exception:
-                            continue
-                if field_name not in new_fields:
-                    new_fields[field_name] = (field_type, field_value)
-
-        # Handle primitive types
+            new_fields[field_name] = _handle_union_field(field_type, field_value)
         else:
             new_fields[field_name] = (field_type, field_value)
 
-    # Create a new model with all fields optional
     partial_model = create_model(
         f"Partial{model.__name__}",
         __base__=model,
         **{name: (type_, None) for name, (type_, _) in new_fields.items()},
     )
 
-    # Create an instance with the provided data
     return partial_model(**{k: v for k, (_, v) in new_fields.items() if v is not None})
 
 
