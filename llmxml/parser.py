@@ -109,36 +109,7 @@ def _get_all_possible_tags(type_dict: dict) -> set[str]:
     return tags
 
 
-def _clean_xml(xml_content: str, type_dict: dict) -> str:
-    """
-    Clean the XML content by:
-    1. Removing content before first < and after last >
-    2. Closing any unclosed tags that are present in the model
-    """
-    # Get all valid tags from the model
-    valid_tags: set[str] = _get_all_possible_tags(type_dict)
-
-    opening_tags: list[str] = []
-    for match in re.finditer(r"<([^/][^>]*)>", xml_content):
-        tag = match.group(1)
-        if tag in valid_tags:
-            opening_tags.append(tag)
-
-    closing_tags: list[str] = []
-    for match in re.finditer(r"</([^>]*)>", xml_content):
-        tag = match.group(1)
-        if tag in valid_tags:
-            closing_tags.append(tag)
-
-    # Add missing closing tags in reverse order
-    for tag in reversed(opening_tags):
-        if tag not in closing_tags:
-            xml_content += f"</{tag}>"
-
-    return xml_content
-
-
-def _clean_xml_fallback(xml_content: str) -> str:
+def _clean_xml(xml_content: str) -> str:
     """
     Clean the XML content by removing the leading and trailing tags.
     :param xml_content: The XML content to clean
@@ -442,20 +413,21 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
 
 
 def _parse_xml(
-    model: Type[ModelType], xml_content: str, type_dict: dict, fallback: bool = False
+    model: Type[ModelType],
+    xml_content: str,
+    type_dict: dict,
+    failed_initial: bool = False,
 ) -> ModelType:
     """
     Parse the XML content into a Pydantic model.
     :param model: The Pydantic model to parse
     :param xml_content: The XML content to parse
     :param type_dict: The type dictionary from inspect_type_annotation
-    :param fallback: Whether to use the fallback cleaner
+    :param failed_initial: If the initial parse failed, clean the XML content
     :return: The parsed Pydantic model
     """
-    if fallback:
-        xml_content: str = _clean_xml_fallback(xml_content)
-    else:
-        xml_content: str = _clean_xml(xml_content, type_dict)
+    if failed_initial:
+        xml_content: str = _clean_xml(xml_content)
 
     parsed_dict: dict
     parsed_dict, _, _ = _recurse(xml_content, type_dict, 0)
@@ -477,7 +449,7 @@ def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
     try:
         return _parse_xml(model, xml_content, type_dict)
     except Exception:
-        return _parse_xml(model, xml_content, type_dict, fallback=True)
+        return _parse_xml(model, xml_content, type_dict, failed_initial=True)
 
 
 def _handle_list_field(field_type: type, field_value: Any) -> tuple[Any, Any]:

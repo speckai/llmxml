@@ -1,15 +1,15 @@
 import json
-from enum import StrEnum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
+from rich.console import Console
 
 from llmxml import parse_xml
 
 T = TypeVar("T", bound=BaseModel)
 
-from rich.console import Console
 
 console = Console()
 
@@ -53,9 +53,6 @@ class ChunkInfo(BaseModel):
 #     VIDEO = "video"
 
 
-from enum import Enum
-
-
 class SearchResultType(Enum):
     BASIC_TEXT = 1
     IMAGE = 2
@@ -90,6 +87,8 @@ class TestFileAction:
         assert result.search_results[0].search_result_type == SearchResultType.IMAGE
         assert result.search_results[1].search_result_type == SearchResultType.VIDEO
 
+    import time
+
     def test_enum_nested_streaming(self):
         xml = load_test_file("enum_nested.xml")
         partial_content = ""
@@ -98,9 +97,8 @@ class TestFileAction:
         for char in xml:
             partial_content += char
             result = parse_xml(EnumSearchResponse, partial_content)
-            if result is not None:
-                validate_parsed_model(result, EnumSearchResponse)
-                last_valid_result = result
+            validate_parsed_model(result, EnumSearchResponse)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, EnumSearchResponse)
