@@ -1,4 +1,5 @@
 import types
+from enum import Enum
 from typing import List, Literal, Type, Union, get_args
 
 from pydantic import BaseModel, Field
@@ -335,12 +336,20 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
             )
     return ""
 
-
 def _process_field(field_name: str, field_info) -> str:
     """Process a single field and return its XML representation."""
     type_info = _get_type_info(field_info)
     required_info = "required" if field_info.is_required() else "optional"
-    description = field_info.description or f"Description of {field_name}"
+
+    # Handle Enum types
+    # TODO: maybe look at alternative ways to do this
+    if isinstance(field_info.annotation, type) and issubclass(field_info.annotation, Enum):
+        enum_values = [e.value for e in field_info.annotation]
+        output = f"<{field_name}>\n[{type_info}]\n[{required_info}]"
+        if field_info.description:
+            output += f"\n[{field_info.description}]"
+        output += f"\n[{field_info.annotation.__name__}: {', '.join(map(str, enum_values))}]\n</{field_name}>"
+        return output
 
     # Handle list types
     if (
@@ -357,11 +366,26 @@ def _process_field(field_name: str, field_info) -> str:
             nested_prompts = [
                 _process_field(name, info) for name, info in nested_fields.items()
             ]
-            return (
-                f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n"
-                f"<{item_name}>\n" + "\n".join(nested_prompts) + f"\n</{item_name}>\n"
-                f"</{field_name}>"
+            output = f"<{field_name}>\n[type: list[{item_type.__name__}]]\n[{required_info}]"
+            if field_info.description:
+                output += f"\n[{field_info.description}]"
+            output += (
+                f"\n<{item_name}>\n"
+                + "\n".join(nested_prompts)
+                + f"\n</{item_name}>\n</{field_name}>"
             )
+            return output
+
+        # If the list contains enums, show possible values
+        if isinstance(item_type, type) and issubclass(item_type, Enum):
+            enum_values = [e.value for e in item_type]
+            output = f"<{field_name}>\n[type: list[{item_type.__name__}]]\n[{required_info}]"
+            if field_info.description:
+                output += f"\n[{field_info.description}]"
+            output += (
+                f"\n[{item_type.__name__}: {', '.join(map(str, enum_values))}]\n</{field_name}>"
+            )
+            return output
 
         # Handle other list types including List[Union[...]]
         nested_result = _process_nested_union_list(field_name, field_info, type_info)
@@ -376,14 +400,17 @@ def _process_field(field_name: str, field_info) -> str:
         nested_prompts = [
             _process_field(name, info) for name, info in nested_fields.items()
         ]
-        return (
-            f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n"
-            + "\n".join(nested_prompts)
-            + f"\n</{field_name}>"
-        )
+        output = f"<{field_name}>\n[{type_info}]\n[{required_info}]"
+        if field_info.description:
+            output += f"\n[{field_info.description}]"
+        output += "\n" + "\n".join(nested_prompts) + f"\n</{field_name}>"
+        return output
 
-    return f"<{field_name}>\n[{type_info}]\n[{required_info}]\n[{description}]\n</{field_name}>"
-
+    output = f"<{field_name}>\n[{type_info}]\n[{required_info}]"
+    if field_info.description:
+        output += f"\n[{field_info.description}]"
+    output += f"\n</{field_name}>"
+    return output
 
 def generate_prompt_template(
     model: Type[BaseModel], include_instructions: bool = True
