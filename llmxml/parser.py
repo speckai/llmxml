@@ -356,7 +356,6 @@ def _fill_with_empty(parsed_dict: dict, type_dict: dict) -> dict:
     for unseen_tag, arg in _get_possible_opening_tags(
         type_dict, set(parsed_dict.keys())
     ).items():
-        # print(arg, unseen_tag)
         if _is_field_optional(type_dict, unseen_tag):
             continue
         if _is_pydantic_model(arg["origin"]):
@@ -475,7 +474,7 @@ def make_partial(model: Type[ModelType], data: dict[str, Any]) -> ModelType:
                                 make_partial(possible_type, field_value),
                             )
                             break
-                        except:
+                        except Exception:
                             continue
                 if field_name not in new_fields:
                     new_fields[field_name] = (field_type, field_value)
@@ -502,16 +501,15 @@ def _convert_enum_content(enum_type: type[Enum], content: str) -> Enum | str | N
     - Otherwise, pass the raw string along, which might match the enum's string value or raise error.
     """
     content = content.strip()
-    if content.isdigit():
-        # Attempt 1-based indexing into the enum members
-        try:
-            idx = int(content) - 1
-            members = list(enum_type)
-            return members[idx]  # Return the actual Enum member
-        except (IndexError, ValueError):
-            # If out of range or invalid integer, default to None (pydantic may raise validation error if required)
-            return None
-    else:
+    if not content.isdigit():
         # Just return the stripped string.
         # If it matches an Enum's string value or name, pydantic can parse it.
         return content
+    # Attempt 1-based indexing into the enum members
+    try:
+        idx = int(content) - 1
+        members = list(enum_type)
+        return members[idx]  # Return the actual Enum member
+    except (IndexError, ValueError):
+        # If out of range or invalid integer, default to None (pydantic may raise validation error if required)
+        return None
