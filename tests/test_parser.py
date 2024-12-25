@@ -125,6 +125,21 @@ class TestBasicResponse:
         assert result.thinking.strip() != ""
         assert len(result.movies) > 0
 
+    def test_basic_response_streaming(self):
+        xml = load_test_file("basic_response.xml")
+        partial_content = ""
+        last_valid_result = None
+        for char in xml:
+            partial_content += char
+            result = parse_xml(BasicResponse, partial_content)
+            validate_parsed_model(result, BasicResponse)
+            last_valid_result = result
+
+        assert last_valid_result is not None
+        assert isinstance(last_valid_result, BasicResponse)
+        assert last_valid_result.thinking.strip() != ""
+        assert len(last_valid_result.movies) > 0
+
 
 class CreateAction(BaseModel):
     new_file_path: str = Field(..., description="The path to the new file to create")
