@@ -113,6 +113,19 @@ class TestFileAction:
         )
 
 
+class BasicResponse(BaseModel):
+    thinking: str = Field(..., description="The thinking to perform")
+    movies: list[str] = Field(..., description="The movies to do idk")
+
+
+class TestBasicResponse:
+    def test_basic_response(self):
+        xml = load_test_file("basic_response.xml")
+        result: BasicResponse = parse_xml(BasicResponse, xml)
+        assert result.thinking.strip() != ""
+        assert len(result.movies) > 0
+
+
 class CreateAction(BaseModel):
     new_file_path: str = Field(..., description="The path to the new file to create")
     file_contents: str = Field(
@@ -168,9 +181,9 @@ class TestActions:
         for char in xml:
             partial_content += char
             result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
@@ -198,9 +211,8 @@ class TestActions:
         for char in xml:
             partial_content += char
             result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
@@ -231,9 +243,8 @@ class TestActions:
         for char in xml:
             partial_content += char
             result = parse_xml(CodeAction, partial_content)
-            if result is not None:
-                validate_parsed_model(result, CodeAction)
-                last_valid_result = result
+            validate_parsed_model(result, CodeAction)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, CodeAction)
@@ -326,9 +337,9 @@ class TestMovies:
         for char in xml:
             partial_content += char
             result = parse_xml(ResponseObject, partial_content)
-            if result is not None:
-                validate_parsed_model(result, ResponseObject)
-                last_valid_result = result
+
+            validate_parsed_model(result, ResponseObject)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, ResponseObject)
@@ -368,9 +379,9 @@ class TestDetails:
         for char in xml:
             partial_content += char
             result = parse_xml(Details, partial_content)
-            if result is not None:
-                validate_parsed_model(result, Details)
-                last_valid_result = result
+
+            validate_parsed_model(result, Details)
+            last_valid_result = result
 
         assert last_valid_result is not None
         assert isinstance(last_valid_result, Details)
