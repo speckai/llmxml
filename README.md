@@ -1,7 +1,7 @@
 # llmxml - XML parsing for LLM outputs
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-[![PyPI package](https://badge.fury.io/py/logtail-python.svg)](https://badge.fury.io/py/logtail-python)
+[![PyPI package](https://badge.fury.io/py/llmxml.svg)](https://badge.fury.io/py/llmxml)
 
 **Sponsored by [Speck](https://speck.sh)**
 [![Speck](https://speck.sh/_next/image?url=%2Fspeck-icon.png&w=16&q=75)](https://speck.sh/)
