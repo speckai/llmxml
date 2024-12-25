@@ -43,15 +43,31 @@ def _inspect_type_annotation(annotation, name: str = "") -> dict:
     :param name: The name of the type (used for debugging)
     :return: A dictionary of the type structure
     """
-    # Mainly for list
+    # Handle list or other generics
     if isinstance(annotation, types.GenericAlias):
         origin: type = get_origin(annotation)
         args: list = get_args(annotation)
-        assert all(
-            hasattr(arg, "__origin__")
-            or (isinstance(arg, type) and issubclass(arg, BaseModel))
-            for arg in args
-        ), "Lists of primitives not allowed. Wrap the naked field in a pydantic model."
+
+        if origin is list and len(args) == 1:
+            inner_type = args[0]
+            if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
+                return {
+                    "origin": origin,
+                    "name": name,
+                    "args": [_inspect_type_annotation(inner_type)],
+                }
+
+            if inner_type in (str, int, float):
+                return {
+                    "origin": origin,
+                    "name": name,
+                    "args": [
+                        {
+                            "origin": inner_type,
+                            "name": inner_type.__name__,  # 'str', 'int', 'float'
+                        }
+                    ],
+                }
 
         return {
             "origin": origin,
@@ -59,17 +75,14 @@ def _inspect_type_annotation(annotation, name: str = "") -> dict:
             "args": [_inspect_type_annotation(arg) for arg in args],
         }
 
-    # Mainly for Union
     if hasattr(annotation, "__origin__"):
         origin: type = get_origin(annotation)
         args: list = get_args(annotation)
-
         return {
             "origin": origin,
             "args": [_inspect_type_annotation(arg, name) for arg in args],
         }
 
-    # For pydantic models
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         origin: type = annotation
         name: str = _camel_to_snake(annotation.__name__)
@@ -77,7 +90,6 @@ def _inspect_type_annotation(annotation, name: str = "") -> dict:
             (value.annotation, field)
             for field, value in annotation.model_fields.items()
         ]
-
         return {
             "origin": origin,
             "name": name,
@@ -86,7 +98,7 @@ def _inspect_type_annotation(annotation, name: str = "") -> dict:
             ],
         }
 
-    # For primitives
+    # Otherwise, assume it's a primitive/enumeration
     return {
         "origin": annotation,
         "name": name,
@@ -99,7 +111,7 @@ def _get_all_possible_tags(type_dict: dict) -> set[str]:
     :param type_dict: The type dictionary to extract tags from
     :return: A set of all possible tag names
     """
-    tags = set()
+    tags: set[str] = set()
     if "name" in type_dict and type_dict["name"]:
         tags.add(type_dict["name"])
 
@@ -129,7 +141,6 @@ def _is_list_type(t: type) -> bool:
     if t is list:
         return True
 
-    # Check if it's a generic list type
     return t.__origin__ is list if isinstance(t, types.GenericAlias) else False
 
 
@@ -277,8 +288,8 @@ def _handle_closing_tag(
     """
     if _is_list_type(open_arg["origin"]):
         if not attribute_list and any(arg.get("args", []) for arg in open_arg["args"]):
-            first_variant = open_arg["args"][0]
-            empty_dict = _fill_with_empty({}, first_variant)
+            first_variant: dict = open_arg["args"][0]
+            empty_dict: dict = _fill_with_empty({}, first_variant)
             return [empty_dict], closing_match.end(), True
         return attribute_list, closing_match.end(), True
 
@@ -287,16 +298,17 @@ def _handle_closing_tag(
             return {}, closing_match.end(), True
         return attribute_dict, closing_match.end(), True
 
-    # Handle primitive or Enum content
-    opening_tag_string = f"<{open_arg['name']}>"
-    opening_tag_idx = xml_content.rfind(opening_tag_string, 0, pos)
-    content = xml_content[
+    opening_tag_string: str = f"<{open_arg['name']}>"
+    opening_tag_idx: int = xml_content.rfind(opening_tag_string, 0, pos)
+    content: str = xml_content[
         opening_tag_idx + len(opening_tag_string) : closing_match.start()
     ]
 
     if isinstance(open_arg["origin"], type) and issubclass(open_arg["origin"], Enum):
-        content = content.strip()
-        enum_value = _convert_enum_content(open_arg["origin"], content)
+        content: str = content.strip()
+        enum_value: Enum | str | None = _convert_enum_content(
+            open_arg["origin"], content
+        )
         attribute_dict[open_arg["name"]] = enum_value
         return enum_value, closing_match.end(), True
 
@@ -445,7 +457,10 @@ def parse_xml(model: Type[ModelType], xml_content: str) -> ModelType:
     :param xml_content: The XML content to parse
     :return: The parsed Pydantic model
     """
-    type_dict = _inspect_type_annotation(model)
+    assert isinstance(model, type) and issubclass(
+        model, BaseModel
+    ), "Model must be a Pydantic model"
+    type_dict: dict = _inspect_type_annotation(model)
     try:
         return _parse_xml(model, xml_content, type_dict)
     except Exception:
