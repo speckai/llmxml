@@ -1,6 +1,7 @@
 from typing import List, Literal, Union
 
-from llmxml.prompting import generate_prompt_template
+from llmxml.prompting import generate_prompt_template, generate_example
+from llmxml.parser import parse_xml
 from pydantic import BaseModel, Field
 
 
@@ -115,3 +116,13 @@ def test_optional_fields():
     )
     print(expected)
     assert result == expected
+
+
+def test_example_generation():
+    result = generate_example(Action)
+    print(result)
+    parsed = parse_xml(result)
+    print(parsed)
+
+if __name__ == "__main__":
+    test_optional_fields()

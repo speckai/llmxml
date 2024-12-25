@@ -1,7 +1,10 @@
+import re
 import types
-from typing import List, Literal, Type, Union, get_args
+from enum import Enum
+from typing import Literal, Type, Union, get_args, get_origin
 
 from pydantic import BaseModel, Field
+from pydantic.fields import FieldInfo
 
 
 def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
@@ -264,8 +267,13 @@ Make sure to return an instance of the output, NOT the schema itself. Do NOT inc
 """.strip()
     )
 
-def _get_type_info(field_info) -> str:
-    """Extract and format the type information from a field."""
+
+def _get_type_info(field_info: FieldInfo) -> str:
+    """
+    Extract and format the type information from a field.
+    :param field_info: The field info to extract type information from.
+    :return: A string representation of the type information.
+    """
     if (
         hasattr(field_info.annotation, "__name__")
         and field_info.annotation.__name__ == "XMLSafeString"
@@ -298,10 +306,21 @@ def _get_type_info(field_info) -> str:
     return f"type: {field_info.annotation.__name__}"
 
 
-def _process_nested_union_list(field_name: str, field_info, type_info: str) -> str:
-    """Process fields that are List[Union[...]] types with nested fields."""
+def _process_nested_union_list(
+    field_name: str, field_info: FieldInfo, type_info: str
+) -> str:
+    """
+    Process fields that are list[Union[...]] or list[X|Y|Z] types with nested fields.
+    :param field_name: The name of the field to process.
+    :param field_info: The field info to process.
+    :param type_info: The type information to use.
+    :return: An XML string representation of the field.
+    """
     args = get_args(field_info.annotation)[0]
-    if hasattr(args, "__origin__") and args.__origin__ is Union:
+    # Check for both typing.Union and Python 3.10+ builtin union (types.UnionType)
+    if (hasattr(args, "__origin__") and args.__origin__ is Union) or (
+        isinstance(args, types.UnionType)
+    ):
         subtypes = get_args(args)
         subtype_fields = []
         for idx, subtype in enumerate(subtypes, 1):
@@ -309,7 +328,7 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
                 subfields = subtype.model_fields
                 # Convert CamelCase to snake_case for the model name
                 model_name = "".join(
-                    ["_" + c.lower() if c.isupper() else c for c in subtype.__name__]
+                    [f"_{c.lower()}" if c.isupper() else c for c in subtype.__name__]
                 ).lstrip("_")
                 subtype_fields.append(
                     f"\n# Option {idx}: {subtype.__name__}"
@@ -327,28 +346,31 @@ def _process_nested_union_list(field_name: str, field_info, type_info: str) -> s
             + "\nOR\n".join(subtype_fields)
             + f"\n</{field_name}>"
         )
-    return ""
+
+    return ""  # Default return if it's not a nested union list
 
 
-def _process_field(field_name: str, field_info) -> str:
-    """Process a single field and return its XML representation."""
-    type_info = _get_type_info(field_info)
-    required_info = "required" if field_info.is_required() else "optional"
-    description = field_info.description or f"Description of {field_name}"
+def _process_field(field_name: str, field_info: FieldInfo) -> str:
+    """
+    Process a single field and return its XML representation.
+    :param field_name: The name of the field to process.
+    :param field_info: The field info to process.
+    :return: An XML string representation of the field.
+    """
+    type_info: str = _get_type_info(field_info)
+    required_info: str = "required" if field_info.is_required() else "optional"
+    description: str = field_info.description or f"Description of {field_name}"
 
-    # Handle list types
     if (
         hasattr(field_info.annotation, "__origin__")
         and field_info.annotation.__origin__ is list
     ):
-        # Get the type of items in the list
-        item_type = get_args(field_info.annotation)[0]
+        item_type: type = get_args(field_info.annotation)[0]
 
-        # If the list contains Pydantic models, show the structure of a single item
         if isinstance(item_type, type) and issubclass(item_type, BaseModel):
-            nested_fields = item_type.model_fields
-            item_name = item_type.__name__.lower()
-            nested_prompts = [
+            nested_fields: dict[str, FieldInfo] = item_type.model_fields
+            item_name: str = item_type.__name__.lower()
+            nested_prompts: list[str] = [
                 _process_field(name, info) for name, info in nested_fields.items()
             ]
             return (
@@ -357,12 +379,12 @@ def _process_field(field_name: str, field_info) -> str:
                 f"</{field_name}>"
             )
 
-        # Handle other list types including List[Union[...]]
-        nested_result = _process_nested_union_list(field_name, field_info, type_info)
+        nested_result: str = _process_nested_union_list(
+            field_name, field_info, type_info
+        )
         if nested_result:
             return nested_result
 
-    # Handle nested Pydantic models
     if isinstance(field_info.annotation, type) and issubclass(
         field_info.annotation, BaseModel
     ):
@@ -382,15 +404,120 @@ def _process_field(field_name: str, field_info) -> str:
 def generate_prompt_template(
     model: Type[BaseModel], include_instructions: bool = True
 ) -> str:
-    """Generates a prompt template from a Pydantic model."""
-    # Process each field and join with double newlines
-    fields = model.model_fields
-    field_prompts = [_process_field(name, info) for name, info in fields.items()]
-    template = "\n".join(field_prompts)
+    """
+    Generates a prompt template from a Pydantic model.
+    :param model: The Pydantic model to generate a prompt template for.
+    :param include_instructions: Whether to include instructions in the prompt template.
+    :return: A string representation of the prompt template.
+    """
+    fields: dict[str, FieldInfo] = model.model_fields
+    field_prompts: list[str] = [
+        _process_field(name, info) for name, info in fields.items()
+    ]
+    template: str = "\n".join(field_prompts)
 
     if include_instructions:
         return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT_GENERAL(template)}\n</response_instructions>"
     return template
+
+
+def generate_example(instance: BaseModel) -> str:
+    """
+    Generates an XML representation of the given Pydantic model instance,
+    reusing its actual field values (rather than sample placeholders).
+    :param instance: The Pydantic model instance to generate an example for.
+    :return: An XML string representation of the instance.
+    """
+
+    def _camel_to_snake(name: str) -> str:
+        """Convert a CamelCase string to snake_case.
+        :param name: The string to convert.
+        :return: A snake_case string.
+        """
+        return re.sub(r"(?!^)([A-Z]+)", r"_\1", name).lower()
+
+    def _to_str(value: any) -> str:
+        """Converts any primitive value to string.
+        :param value: The value to convert to string.
+        :return: A string representation of the value.
+        """
+        return "" if value is None else str(value)
+
+    def _generate_field_xml(field_name: str, value: any, annotation: type) -> str:
+        """
+        Produce <field_name>...</field_name>, interpreting type annotation if needed.
+        :param field_name: The name of the field to produce XML for.
+        :param value: The value of the field to produce XML for.
+        :param annotation: The type annotation of the field to produce XML for.
+        :return: An XML string representation of the field.
+        """
+        origin: type = get_origin(annotation)
+
+        def _to_str(val: any) -> str:
+            return "" if val is None else str(val)
+
+        if origin is Union or isinstance(annotation, types.UnionType):
+            union_args: tuple = (
+                annotation.__args__
+                if isinstance(annotation, types.UnionType)
+                else get_args(annotation)
+            )
+            if value is None:
+                return f"<{field_name}></{field_name}>"
+            for arg in union_args:
+                if arg is not type(None) and isinstance(value, arg):
+                    return _generate_field_xml(field_name, value, arg)
+            return f"<{field_name}>{_to_str(value)}</{field_name}>"
+
+        if origin is list:
+            (inner_type,) = get_args(annotation)
+            if value is None:
+                value = []
+            xml_pieces: list[str] = []
+            for item in value:
+                xml_pieces.append(_generate_field_xml(field_name, item, inner_type))
+
+            return "\n".join(xml_pieces)
+
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            if value is None:
+                # If the value is None, just output empty tags for the nested model
+                model_tag: str = re.sub(
+                    r"(?!^)([A-Z]+)", r"_\1", annotation.__name__
+                ).lower()
+                return f"<{field_name}>\n<{model_tag}></{model_tag}>\n</{field_name}>"
+            return f"<{field_name}>\n{_generate_model_xml(value)}\n</{field_name}>"
+
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            return (
+                f"<{field_name}>{_to_str(value.value if value else '')}</{field_name}>"
+            )
+
+        return f"<{field_name}>{_to_str(value)}</{field_name}>"
+
+    def _generate_model_xml(model_instance: Type[BaseModel]) -> str:
+        """
+        Recursively generate the XML from a model instance.
+        The top-level tag for this sub-block is the snake-cased name of the instance's class.
+        :param model_instance: The Pydantic model instance to generate an example for.
+        :return: An XML string representation of the instance.
+        """
+        model_tag: str = _camel_to_snake(model_instance.__class__.__name__)
+        lines: list[str] = [f"<{model_tag}>"]
+        for field_name, field_info in model_instance.model_fields.items():
+            annotation = field_info.annotation
+            value = getattr(model_instance, field_name, None)
+            lines.append(_generate_field_xml(field_name, value, annotation))
+        lines.append(f"</{model_tag}>")
+        return "\n".join(lines)
+
+    if isinstance(instance, type) and issubclass(instance, BaseModel):
+        raise TypeError(
+            "generate_example() expected a Pydantic model instance, not the class. "
+            "Create an instance first, then pass it in."
+        )
+
+    return _generate_model_xml(instance)
 
 
 if __name__ == "__main__":
@@ -438,26 +565,59 @@ if __name__ == "__main__":
 
     class Action(BaseModel):
         thinking: str = Field(default="", description="The thinking to perform")
-        actions: List[Union[CreateAction, EditAction, CommandAction]] = Field(
+        actions: list[Union[CreateAction, EditAction, CommandAction]] = Field(
             default_factory=list, description="The actions to perform"
         )
 
-    prompt_template = generate_prompt_template(Action)
-    print(prompt_template)
+    print(generate_prompt_template(Action))
 
-    class Movie(BaseModel):
-        title: str = Field(..., description="The title of the movie")
-        director: str = Field(..., description="The director of the movie")
+    action = Action(
+        thinking="First, I need to create a new configuration file. Then, I'll modify an existing source file to use the new configuration.",
+        actions=[
+            CreateAction(
+                action_type="create",
+                new_file_path="config/settings.json",
+                file_contents='interface Config { apiKey: string; baseUrl: string; timeout: number; } const config: Config = { apiKey: "your-api-key-here", baseUrl: "https://api.example.com", timeout: 30 };',
+            ),
+            EditAction(
+                action_type="edit",
+                original_file_path="src/main.py",
+                new_file_contents='import json\n\ndef load_config():\n    with open("config/settings.json", "r") as f:\n        return json.load(f)\n\ndef main():\n    config = load_config()\n    print(f"Connecting to {config[\'baseUrl\']}...")\n\nif __name__ == "__main__":\n    main()',
+            ),
+        ],
+    )
 
-    class Response(BaseModel):
-        movies: list[Movie] = Field(
-            ..., description="A list of movies that match the query"
-        )
+    example = generate_example(action)
+    print(example)
 
-    class ResponseObject(BaseModel):
-        response: Response = Field(
-            ..., description="The response object that contains the movies"
-        )
+    class SomeField(Enum):
+        A = "A"
+        B = "B"
 
-    x = generate_prompt_template(ResponseObject)
-    print(x)
+    class ExampleResponse(BaseModel):
+        response: SomeField = Field(..., description="The response to the query")
+
+    example_response = ExampleResponse(response=SomeField.A)
+
+    example = generate_example(example_response)
+    print(example)
+
+    # prompt_template = generate_prompt_template(Action)
+    # print(prompt_template)
+
+    # class Movie(BaseModel):
+    #     title: str = Field(..., description="The title of the movie")
+    #     director: str = Field(..., description="The director of the movie")
+
+    # class Response(BaseModel):
+    #     movies: list[Movie] = Field(
+    #         ..., description="A list of movies that match the query"
+    #     )
+
+    # class ResponseObject(BaseModel):
+    #     response: Response = Field(
+    #         ..., description="The response object that contains the movies"
+    #     )
+
+    # x = generate_prompt_template(ResponseObject)
+    # print(x)
