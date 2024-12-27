@@ -19,14 +19,25 @@ Format instructions:
 </field_name>
 """.strip()
 
+class Priority(Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+class ResourceType(Enum):
+    CONFIG = "configuration"
+    DATA = "data"
+    TEMPLATE = "template"
+
 class DirectAction(BaseModel):
     action_type: Literal["direct"] = Field(..., description="Immediate action to be performed")
     instruction: str = Field(..., description="The specific instruction to execute")
-    priority: str | None = Field(None, description="Priority level of the action")
+    priority: Priority = Field(..., description="Priority level of the action")
 
 class GenerateAction(BaseModel):
     action_type: Literal["generate"] = Field(..., description="Creation of new content/resource")
     resource_identifier: str = Field(..., description="Unique identifier for the new resource")
+    resource_type: ResourceType = Field(..., description="Type of resource being generated")
     resource_content: str = Field(..., description="The content/data to be generated")
     metadata: str | None = Field(None, description="Additional information about the resource")
 
@@ -47,6 +58,7 @@ def generate_example_output() -> str:
             GenerateAction(
                 action_type="generate",
                 resource_identifier="resources/config.json",
+                resource_type=ResourceType.CONFIG,
                 resource_content='''{
   "type": "configuration",
   "parameters": {
@@ -57,18 +69,10 @@ def generate_example_output() -> str:
 }''',
                 metadata="Version: 1.0, Environment: Production"
             ),
-            ModifyAction(
-                action_type="modify",
-                target_identifier="resources/main.json",
-                updated_content='''{
-  "type": "resource",
-  "dependencies": ["configuration"],
-  "properties": {
-    "uses_config": true,
-    "version": "1.0"
-  }
-}''',
-                backup_needed=True
+            DirectAction(
+                action_type="direct",
+                instruction="Update system cache",
+                priority=Priority.HIGH
             )
         ]
     )
