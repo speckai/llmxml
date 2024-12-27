@@ -287,10 +287,12 @@ def _handle_closing_tag(
     :return: A tuple of (parsed content, new position, has_content)
     """
     if _is_list_type(open_arg["origin"]):
-        if not attribute_list and any(arg.get("args", []) for arg in open_arg["args"]):
-            first_variant: dict = open_arg["args"][0]
-            empty_dict: dict = _fill_with_empty({}, first_variant)
-            return [empty_dict], closing_match.end(), True
+        if not attribute_list:
+            return [], closing_match.end(), True
+        # if not attribute_list and any(arg.get("args", []) for arg in open_arg["args"]):
+        #     first_variant: dict = open_arg["args"][0]
+        #     empty_dict: dict = _fill_with_empty({}, first_variant)
+        #     return [empty_dict], closing_match.end(), True
         return attribute_list, closing_match.end(), True
 
     if _is_pydantic_model(open_arg["origin"]):
@@ -552,7 +554,6 @@ def _parse_xml(
     if not parsed_dict:
         parsed_dict = {}
     parsed_dict = _fill_with_empty(parsed_dict, type_dict)
-
     return model(**parsed_dict)
 
 
