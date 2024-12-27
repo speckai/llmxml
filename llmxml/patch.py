@@ -5,7 +5,7 @@ from typing import Any, Callable, Type, TypeVar, Union
 from pydantic import BaseModel
 
 from .parser import parse_xml
-from .prompting import generate_prompt_template
+from .prompts import generate_prompt_template
 
 T = TypeVar("T", bound=BaseModel)
 
