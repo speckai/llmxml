@@ -286,12 +286,13 @@ if __name__ == "__main__":
         B = "B"
 
     class ExampleResponse(BaseModel):
-        response: SomeField = Field(..., description="The response to the query")
+        response: list[SomeField] = Field(..., description="The response to the query")
 
     example_response = ExampleResponse(response=[SomeField.A, SomeField.B])
 
     example = generate_example(example_response)
     print(example)
+    example_prompt = generate_prompt_template(ExampleResponse)
 
     prompt_template = generate_prompt_template(Action)
     print(prompt_template)

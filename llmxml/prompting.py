@@ -97,13 +97,15 @@ def _process_field(field_name: str, field_info) -> str:
     required_info = "required" if field_info.is_required() else "optional"
 
     # Handle Enum types
-    # TODO: maybe look at alternative ways to do this
     if isinstance(field_info.annotation, type) and issubclass(field_info.annotation, Enum):
         enum_values = [e.value for e in field_info.annotation]
-        output = f"<{field_name}>\n[{type_info}]\n[{required_info}]"
+        output = f"""<{field_name}>
+    <type>{field_info.annotation.__name__}</type>
+    <required>{required_info}</required>
+    <allowed_values>{', '.join(map(str, enum_values))}</allowed_values>"""
         if field_info.description:
-            output += f"\n[{field_info.description}]"
-        output += f"\n[{field_info.annotation.__name__}: {', '.join(map(str, enum_values))}]\n</{field_name}>"
+            output += f"\n    <description>{field_info.description}</description>"
+        output += f"\n</{field_name}>"
         return output
 
     if (
@@ -131,12 +133,13 @@ def _process_field(field_name: str, field_info) -> str:
         # If the list contains enums, show possible values
         if isinstance(item_type, type) and issubclass(item_type, Enum):
             enum_values = [e.value for e in item_type]
-            output = f"<{field_name}>\n[type: list[{item_type.__name__}]]\n[{required_info}]"
+            output = f"""<{field_name}>
+    <type>list[{item_type.__name__}]</type>
+    <required>{required_info}</required>
+    <allowed_values>{', '.join(map(str, enum_values))}</allowed_values>"""
             if field_info.description:
-                output += f"\n[{field_info.description}]"
-            output += (
-                f"\n[{item_type.__name__}: {', '.join(map(str, enum_values))}]\n</{field_name}>"
-            )
+                output += f"\n    <description>{field_info.description}</description>"
+            output += f"\n</{field_name}>"
             return output
 
         nested_result: str = _process_nested_union_list(
