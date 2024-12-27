@@ -15,8 +15,11 @@ Format instructions:
 <field_name>
 [type: object_type]
 [required/optional]
-[description]
+[description if available]
+[enum values if applicable]
 </field_name>
+
+If the field is a list, you create a new <field_name> for each item in the list.
 """.strip()
 
 class Priority(Enum):
@@ -84,7 +87,7 @@ def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
         "Basic example:",
         "<EXAMPLE>",
         "<EXAMPLE_SCHEMA>",
-        generate_prompt_template(ExampleSchema),
+        _generate_template_string(ExampleSchema),
         "</EXAMPLE_SCHEMA>",
         "",
         "<EXAMPLE_OUTPUT>",
@@ -98,26 +101,28 @@ def ADHERE_INSTRUCTIONS_PROMPT(schema: str) -> str:
         "Make sure to return an instance of the output, NOT the schema itself. Do NOT include any schema metadata (like [type: ...]) in your output."
     ]).strip()
 
-def generate_prompt_template(model: Type[BaseModel]) -> str:
+def _generate_template_string(model: Type[BaseModel]) -> str:
     """
-    Generates a basic prompt template from a Pydantic model without instructions.
-    :param model: The Pydantic model to generate a prompt template for.
-    :return: A string representation of the basic prompt template.
+    Generates a template string from a Pydantic model's fields.
+    :param model: The Pydantic model to process
+    :return: Combined template string of processed fields
     """
     fields: dict[str, FieldInfo] = model.model_fields
-    field_prompts: list[str] = [
-        _process_field(name, info) for name, info in fields.items()
-    ]
+    field_prompts = [_process_field(name, info) for name, info in fields.items()]
     return "\n".join(field_prompts)
 
-def generate_prompt_template_with_instructions(model: Type[BaseModel]) -> str:
+def generate_prompt_template(model: Type[BaseModel], include_instructions: bool = True) -> str:
     """
-    Generates a prompt template from a Pydantic model with instructions.
+    Generates a prompt template from a Pydantic model.
     :param model: The Pydantic model to generate a prompt template for.
-    :return: A string representation of the prompt template with instructions.
+    :param include_instructions: Whether to include instructions in the template.
+    :return: A string representation of the prompt template.
     """
-    template = generate_prompt_template(model)
-    return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT(template)}\n</response_instructions>"
+    template = _generate_template_string(model)
+    
+    if include_instructions:
+        return f"<response_instructions>\n{ADHERE_INSTRUCTIONS_PROMPT(template)}\n</response_instructions>"
+    return template
 
 def generate_example(instance: BaseModel) -> str:
     """
