@@ -314,7 +314,6 @@ def _handle_closing_tag(
         attribute_dict[open_arg["name"]] = enum_value
         return enum_value, closing_match.end(), True
 
-    attribute_dict[open_arg["name"]] = content
     return content, closing_match.end(), True
 
 
@@ -373,7 +372,7 @@ def _recurse(
 
             if _is_list_type(open_arg["origin"]) and is_content:
                 attribute_list.append(dict_entry)
-            elif dict_entry:
+            elif dict_entry or (new_open_arg["origin"] is str and dict_entry == ""):
                 attribute_dict[new_open_arg["name"]] = dict_entry
 
             pos = new_pos
